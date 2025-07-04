@@ -4,8 +4,8 @@
 
 - `backend/app/models/user.py` - User management models (User, OAuthProvider) with comprehensive validation, authentication fields, and OAuth integration.
 - `backend/app/models/test_user.py` - Comprehensive unit tests for user models with >90% coverage including edge cases and validation testing.
-- `backend/app/models/course.py` - Course content structure models (Language, Course, Section, Unit, Lesson).
-- `backend/app/models/test_course.py` - Unit tests for course models.
+- `backend/app/models/course.py` - Course content structure models (Language, Course, Section, Unit, Lesson, LessonPrerequisite) with comprehensive validation and hierarchical relationships.
+- `backend/app/models/test_course.py` - Comprehensive unit tests for course models with >90% coverage including validation testing and relationship verification.
 - `backend/app/models/exercise.py` - Exercise system models (ExerciseType, Exercise, ExerciseOption, AudioFile).
 - `backend/app/models/test_exercise.py` - Unit tests for exercise models.
 - `backend/app/models/progress.py` - Progress tracking models (UserCourse, UserLessonProgress, UserExerciseInteraction).
@@ -34,14 +34,14 @@
   - [x] 1.4 Implement user model validation and constraints (DoD: Email uniqueness, password requirements enforced)
   - [x] 1.5 Write comprehensive unit tests for user models (DoD: >90% test coverage, edge cases handled)
 
-- [ ] 2.0 Course Content Structure Models Implementation
-  - [ ] 2.1 Create Language model with localization support (DoD: Language model stores codes, names, flags)
-  - [ ] 2.2 Create Course model with language relationships (DoD: Course model links from/to languages correctly)
-  - [ ] 2.3 Create Section model with hierarchical structure (DoD: Section model maintains course ordering)
-  - [ ] 2.4 Create Unit model with visual metadata (DoD: Unit model stores icons, colors, descriptions)
-  - [ ] 2.5 Create Lesson model with XP and timing data (DoD: Lesson model calculates rewards and estimates correctly)
-  - [ ] 2.6 Implement lesson prerequisites system (DoD: LessonPrerequisite model prevents circular dependencies)
-  - [ ] 2.7 Write comprehensive unit tests for course models (DoD: >90% test coverage, relationships validated)
+- [x] 2.0 Course Content Structure Models Implementation
+  - [x] 2.1 Create Language model with localization support (DoD: Language model stores codes, names, flags)
+  - [x] 2.2 Create Course model with language relationships (DoD: Course model links from/to languages correctly)
+  - [x] 2.3 Create Section model with hierarchical structure (DoD: Section model maintains course ordering)
+  - [x] 2.4 Create Unit model with visual metadata (DoD: Unit model stores icons, colors, descriptions)
+  - [x] 2.5 Create Lesson model with XP and timing data (DoD: Lesson model calculates rewards and estimates correctly)
+  - [x] 2.6 Implement lesson prerequisites system (DoD: LessonPrerequisite model prevents circular dependencies)
+  - [x] 2.7 Write comprehensive unit tests for course models (DoD: >90% test coverage, relationships validated)
 
 - [ ] 3.0 Exercise System Models Implementation
   - [ ] 3.1 Create ExerciseType model for exercise categories (DoD: ExerciseType model supports translation, multiple choice, listening)
