@@ -1,0 +1,25 @@
+# Duolingo Clone Development Rules
+
+## Design System Priority
+- ALWAYS match screenshots exactly for landing page elements
+- Ignore "curated by Mobbin" banners in screenshot analysis
+- Extract text content exactly as written in screenshots
+- Use design tokens from design-reference/ folder analysis
+
+## MVP Scope Enforcement
+- Only implement P0 features from duolingo-mvp-scope.md
+- Reject requests for P1 or out-of-scope features during MVP phase
+- Focus on pixel-perfect landing page first (Week 1 priority)
+
+## Code Quality Standards
+- Use TypeScript for all React components
+- Implement responsive design mobile-first
+- Use Tailwind CSS with custom design tokens
+- Follow Next.js 15 App Router patterns
+- Implement proper error boundaries
+
+## AI Assistant Guidelines
+- Analyze screenshots before building components
+- Ask for screenshot clarification when UI is unclear
+- Suggest design token extraction when building new components
+- Remind about MVP scope when suggesting features
