@@ -240,7 +240,7 @@ class TestConfigurationIntegration:
         ("DEBUG", bool),
         ("DB_PORT", int),
         ("REDIS_PORT", int),
-        ("JWT_EXPIRATION_HOURS", int),
+        ("ACCESS_TOKEN_EXPIRE_MINUTES", int),
         ("CORS_ALLOW_CREDENTIALS", bool),
     ])
     def test_type_coercion(self, env_var, expected_type):
@@ -251,7 +251,7 @@ class TestConfigurationIntegration:
             "DEBUG": "true",
             "DB_PORT": "5433",
             "REDIS_PORT": "6380",
-            "JWT_EXPIRATION_HOURS": "48",
+            "ACCESS_TOKEN_EXPIRE_MINUTES": "48",
             "CORS_ALLOW_CREDENTIALS": "false",
         }
         

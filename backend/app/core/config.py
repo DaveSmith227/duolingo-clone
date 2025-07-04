@@ -43,7 +43,9 @@ class Settings(BaseSettings):
     # Security settings
     secret_key: str = "dev-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
-    jwt_expiration_hours: int = 24
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+    password_reset_expire_hours: int = 1
     
     # CORS settings
     cors_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
