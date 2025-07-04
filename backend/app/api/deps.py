@@ -1,291 +1,263 @@
-"""
-API Dependencies
+"""API Dependencies
 
-FastAPI dependency injection functions for authentication, database sessions,
+FastAPI dependency injection utilities for authentication, database sessions,
 and other common requirements across API endpoints.
 """
 
+import logging
 from typing import Generator, Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_database_session
 from app.core.security import verify_access_token, extract_token_from_header
 
-# HTTP Bearer token security scheme
-security = HTTPBearer()
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Security scheme for JWT authentication
+security = HTTPBearer(auto_error=False)
 
 
 def get_db() -> Generator[Session, None, None]:
     """
-    FastAPI dependency to get database session.
+    Dependency to get database session.
     
     Yields:
-        SQLAlchemy Session instance
+        Database session
     """
-    yield from get_database_session()
+    try:
+        db = next(get_database_session())
+        yield db
+    except Exception as e:
+        logger.error(f"Database session error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database connection failed"
+        )
 
 
 def get_current_user_id(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> str:
     """
-    FastAPI dependency to get current authenticated user ID.
+    Dependency to get current authenticated user ID.
     
     Args:
-        credentials: HTTP Bearer token credentials
+        credentials: HTTP authorization credentials
         
     Returns:
-        User ID from JWT token
+        User ID from validated JWT token
         
     Raises:
-        HTTPException: If token is invalid or expired
+        HTTPException: If authentication fails
     """
-    token = credentials.credentials
-    
-    # Verify the access token
-    payload = verify_access_token(token)
-    
-    if payload is None:
+    if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Extract token from authorization header
+    token = extract_token_from_header(f"Bearer {credentials.credentials}")
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Verify access token
+    payload = verify_access_token(token)
+    
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     user_id = payload.get("sub")
-    if user_id is None:
+    if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Invalid token payload",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    logger.debug(f"Authenticated user: {user_id}")
     return user_id
 
 
-def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
-) -> Optional[str]:
-    """
-    FastAPI dependency to get current user ID if authenticated (optional).
-    
-    Args:
-        credentials: HTTP Bearer token credentials (optional)
-        
-    Returns:
-        User ID from JWT token or None if not authenticated
-    """
-    if credentials is None:
-        return None
-    
-    token = credentials.credentials
-    
-    # Verify the access token
-    payload = verify_access_token(token)
-    
-    if payload is None:
-        return None
-    
-    return payload.get("sub")
-
-
 def get_current_user_payload(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
     """
-    FastAPI dependency to get full JWT payload of current user.
+    Dependency to get current authenticated user's full token payload.
     
     Args:
-        credentials: HTTP Bearer token credentials
+        credentials: HTTP authorization credentials
         
     Returns:
-        Full JWT payload dictionary
+        Full JWT token payload
         
     Raises:
-        HTTPException: If token is invalid or expired
+        HTTPException: If authentication fails
     """
-    token = credentials.credentials
-    
-    # Verify the access token
-    payload = verify_access_token(token)
-    
-    if payload is None:
+    if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Extract token from authorization header
+    token = extract_token_from_header(f"Bearer {credentials.credentials}")
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Verify access token
+    payload = verify_access_token(token)
+    
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    logger.debug(f"Authenticated user payload: {payload.get('sub', 'unknown')}")
     return payload
+
+
+def get_optional_user_id(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> Optional[str]:
+    """
+    Dependency to get current user ID if authenticated, None otherwise.
+    
+    Args:
+        credentials: HTTP authorization credentials
+        
+    Returns:
+        User ID if authenticated, None otherwise
+    """
+    if not credentials:
+        return None
+    
+    try:
+        # Extract token from authorization header
+        token = extract_token_from_header(f"Bearer {credentials.credentials}")
+        
+        if not token:
+            return None
+        
+        # Verify access token
+        payload = verify_access_token(token)
+        
+        if not payload:
+            return None
+        
+        user_id = payload.get("sub")
+        logger.debug(f"Optional authenticated user: {user_id}")
+        return user_id
+    
+    except Exception as e:
+        logger.debug(f"Optional authentication failed: {e}")
+        return None
 
 
 def require_admin_role(
     current_user_payload: dict = Depends(get_current_user_payload)
-) -> str:
+) -> dict:
     """
-    FastAPI dependency to require admin role.
+    Dependency to require admin role.
     
     Args:
-        current_user_payload: JWT payload from authenticated user
+        current_user_payload: Current user's token payload
         
     Returns:
-        User ID if user has admin role
+        User payload if admin
         
     Raises:
-        HTTPException: If user does not have admin role
+        HTTPException: If user is not admin
     """
-    user_roles = current_user_payload.get("roles", [])
+    user_role = current_user_payload.get("role", "user")
     
-    if "admin" not in user_roles:
+    if user_role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
+            detail="Admin role required"
         )
     
-    return current_user_payload.get("sub")
+    logger.debug(f"Admin access granted for user: {current_user_payload.get('sub')}")
+    return current_user_payload
 
 
 def require_teacher_role(
     current_user_payload: dict = Depends(get_current_user_payload)
-) -> str:
-    """
-    FastAPI dependency to require teacher role.
-    
-    Args:
-        current_user_payload: JWT payload from authenticated user
-        
-    Returns:
-        User ID if user has teacher role
-        
-    Raises:
-        HTTPException: If user does not have teacher role
-    """
-    user_roles = current_user_payload.get("roles", [])
-    
-    if "teacher" not in user_roles and "admin" not in user_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Teacher access required"
-        )
-    
-    return current_user_payload.get("sub")
-
-
-def require_premium_subscription(
-    current_user_payload: dict = Depends(get_current_user_payload)
-) -> str:
-    """
-    FastAPI dependency to require premium subscription.
-    
-    Args:
-        current_user_payload: JWT payload from authenticated user
-        
-    Returns:
-        User ID if user has premium subscription
-        
-    Raises:
-        HTTPException: If user does not have premium subscription
-    """
-    is_premium = current_user_payload.get("is_premium", False)
-    
-    if not is_premium:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Premium subscription required"
-        )
-    
-    return current_user_payload.get("sub")
-
-
-def validate_api_key(api_key: str) -> bool:
-    """
-    Validate API key for external integrations.
-    
-    Args:
-        api_key: API key to validate
-        
-    Returns:
-        True if API key is valid, False otherwise
-    """
-    # TODO: Implement API key validation logic
-    # This could check against database, cache, or external service
-    return False
-
-
-def require_valid_api_key(
-    api_key: str = Depends(lambda: None)  # TODO: Extract from header
-) -> str:
-    """
-    FastAPI dependency to require valid API key.
-    
-    Args:
-        api_key: API key from request headers
-        
-    Returns:
-        API key if valid
-        
-    Raises:
-        HTTPException: If API key is invalid
-    """
-    if not api_key or not validate_api_key(api_key):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key"
-        )
-    
-    return api_key
-
-
-def get_rate_limit_info(
-    current_user_id: str = Depends(get_current_user_id)
 ) -> dict:
     """
-    FastAPI dependency to get rate limit information for current user.
+    Dependency to require teacher role or higher.
     
     Args:
-        current_user_id: Current authenticated user ID
+        current_user_payload: Current user's token payload
         
     Returns:
-        Rate limit information dictionary
-    """
-    # TODO: Implement rate limiting logic
-    # This could check Redis cache or database for user's rate limit status
-    return {
-        "requests_remaining": 1000,
-        "reset_time": 3600,  # seconds
-        "limit": 1000
-    }
-
-
-def check_rate_limit(
-    rate_limit_info: dict = Depends(get_rate_limit_info)
-) -> bool:
-    """
-    FastAPI dependency to check if user has exceeded rate limit.
-    
-    Args:
-        rate_limit_info: Rate limit information for current user
-        
-    Returns:
-        True if within rate limit
+        User payload if teacher or admin
         
     Raises:
-        HTTPException: If rate limit exceeded
+        HTTPException: If user is not teacher or admin
     """
-    if rate_limit_info["requests_remaining"] <= 0:
+    user_role = current_user_payload.get("role", "user")
+    
+    if user_role not in ["teacher", "admin"]:
         raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit exceeded",
-            headers={
-                "X-RateLimit-Limit": str(rate_limit_info["limit"]),
-                "X-RateLimit-Remaining": str(rate_limit_info["requests_remaining"]),
-                "X-RateLimit-Reset": str(rate_limit_info["reset_time"])
-            }
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher role or higher required"
         )
     
-    return True
+    logger.debug(f"Teacher access granted for user: {current_user_payload.get('sub')}")
+    return current_user_payload
+
+
+def require_premium_user(
+    current_user_payload: dict = Depends(get_current_user_payload)
+) -> dict:
+    """
+    Dependency to require premium user status.
+    
+    Args:
+        current_user_payload: Current user's token payload
+        
+    Returns:
+        User payload if premium user
+        
+    Raises:
+        HTTPException: If user is not premium
+    """
+    user_role = current_user_payload.get("role", "user")
+    is_premium = current_user_payload.get("is_premium", False)
+    
+    # Admin and teacher users have premium access
+    if user_role in ["admin", "teacher"] or is_premium:
+        logger.debug(f"Premium access granted for user: {current_user_payload.get('sub')}")
+        return current_user_payload
+    
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Premium subscription required"
+    )
 
 
 def get_pagination_params(
@@ -294,7 +266,7 @@ def get_pagination_params(
     max_page_size: int = 100
 ) -> dict:
     """
-    FastAPI dependency to get pagination parameters.
+    Dependency to get pagination parameters.
     
     Args:
         page: Page number (1-based)
@@ -302,7 +274,7 @@ def get_pagination_params(
         max_page_size: Maximum allowed page size
         
     Returns:
-        Pagination parameters dictionary
+        Dictionary with pagination parameters
         
     Raises:
         HTTPException: If pagination parameters are invalid
@@ -310,13 +282,13 @@ def get_pagination_params(
     if page < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Page number must be greater than 0"
+            detail="Page number must be 1 or greater"
         )
     
     if page_size < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Page size must be greater than 0"
+            detail="Page size must be 1 or greater"
         )
     
     if page_size > max_page_size:
@@ -325,70 +297,121 @@ def get_pagination_params(
             detail=f"Page size cannot exceed {max_page_size}"
         )
     
+    # Calculate offset for database queries
+    offset = (page - 1) * page_size
+    
     return {
         "page": page,
         "page_size": page_size,
-        "offset": (page - 1) * page_size,
+        "offset": offset,
         "limit": page_size
     }
 
 
-def get_sorting_params(
-    sort_by: str = "created_at",
-    sort_order: str = "desc"
-) -> dict:
+def get_current_settings():
     """
-    FastAPI dependency to get sorting parameters.
+    Dependency to get current application settings.
+    
+    Returns:
+        Application settings
+    """
+    return get_settings()
+
+
+def require_development_mode(
+    settings = Depends(get_current_settings)
+):
+    """
+    Dependency to require development mode.
     
     Args:
-        sort_by: Field to sort by
-        sort_order: Sort order ('asc' or 'desc')
-        
-    Returns:
-        Sorting parameters dictionary
+        settings: Application settings
         
     Raises:
-        HTTPException: If sorting parameters are invalid
+        HTTPException: If not in development mode
     """
-    if sort_order not in ["asc", "desc"]:
+    if not settings.is_development:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sort order must be 'asc' or 'desc'"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Endpoint not available in this environment"
         )
     
-    return {
-        "sort_by": sort_by,
-        "sort_order": sort_order
-    }
+    return settings
 
 
-def get_filtering_params(
-    status: Optional[str] = None,
-    category: Optional[str] = None,
-    created_after: Optional[str] = None,
-    created_before: Optional[str] = None
-) -> dict:
+def validate_api_key(api_key: Optional[str] = None) -> bool:
     """
-    FastAPI dependency to get filtering parameters.
+    Dependency to validate API key for external integrations.
     
     Args:
-        status: Filter by status
-        category: Filter by category
-        created_after: Filter by creation date (after)
-        created_before: Filter by creation date (before)
+        api_key: API key to validate
         
     Returns:
-        Filtering parameters dictionary
+        True if valid API key
+        
+    Raises:
+        HTTPException: If API key is invalid
     """
-    filters = {}
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key required",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
     
-    if status:
-        filters["status"] = status
-    if category:
-        filters["category"] = category
-    if created_after:
-        filters["created_after"] = created_after
-    if created_before:
-        filters["created_before"] = created_before
+    settings = get_settings()
     
-    return filters
+    # In a real application, you would validate against a database
+    # For now, we'll use a simple check against environment variable
+    if api_key != getattr(settings, 'api_key', None):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    
+    return True
+
+
+class RateLimitDependency:
+    """
+    Rate limiting dependency class.
+    
+    This is a placeholder for implementing rate limiting.
+    In a production system, you would integrate with Redis or similar.
+    """
+    
+    def __init__(self, max_requests: int = 100, window_seconds: int = 60):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+    
+    def __call__(self, request, user_id: Optional[str] = None):
+        """
+        Rate limiting check.
+        
+        Args:
+            request: FastAPI request object
+            user_id: Optional user ID for user-based rate limiting
+            
+        Returns:
+            True if request is within rate limit
+            
+        Raises:
+            HTTPException: If rate limit exceeded
+        """
+        # TODO: Implement actual rate limiting logic with Redis
+        # For now, this is a placeholder that always allows requests
+        
+        # You would implement logic here to:
+        # 1. Get client IP or user ID
+        # 2. Check Redis for request count in time window
+        # 3. Increment counter
+        # 4. Return or raise exception based on limit
+        
+        return True
+
+
+# Pre-configured rate limit dependencies
+rate_limit_strict = RateLimitDependency(max_requests=10, window_seconds=60)
+rate_limit_moderate = RateLimitDependency(max_requests=50, window_seconds=60)
+rate_limit_generous = RateLimitDependency(max_requests=100, window_seconds=60)
