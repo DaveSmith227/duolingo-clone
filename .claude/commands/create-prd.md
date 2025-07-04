@@ -15,7 +15,7 @@ Your task is to create a detailed Product Requirements Document (PRD) in Markdow
 
 3. **Generate PRD:** Based on the initial prompt and user's answers, create a comprehensive PRD using the structure below.
 
-4. **Save PRD:** Save the document as `prd-[feature-name].md` in the `/tasks` directory.
+4. **Save PRD:** Save the document using the naming convention `prd-###-[feature-name].md` where ### is the next incremental number based on existing PRD files in the `/product-requirements/prds/` directory.
 
 ### Clarifying Questions
 
@@ -56,13 +56,14 @@ Write for a **junior developer**. Requirements should be:
 
 - **Format:** Markdown (.md)
 - **Location:** `/product-requirements/prds/`
-- **Filename:** `prd-[feature-name].md`
+- **Filename:** `prd-###-[feature-name].md` (where ### is the next incremental number)
 
 ### Execution Steps
 
-1. Ask clarifying questions based on the user's initial prompt
-2. Wait for user responses
-3. Generate comprehensive PRD using the structure above
-4. Save to `/product-requirements/prds/prd-[feature-name].md`
+1. **Check existing PRDs:** First, check the `/product-requirements/prds/` directory to find the highest numbered PRD file (e.g., if `prd-001-backend-architecture.md` exists, the next number would be `002`)
+2. Ask clarifying questions based on the user's initial prompt
+3. Wait for user responses
+4. Generate comprehensive PRD using the structure above
+5. Save to `/product-requirements/prds/prd-###-[feature-name].md` (where ### is the next incremental number with zero-padding)
 
 **Important:** Do NOT start implementing the feature - only create the PRD document.
