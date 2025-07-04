@@ -8,6 +8,10 @@ backend application.
 from .base import BaseModel, SoftDeleteModel, AuditModel, VersionedModel, ActiveRecordModel
 from .user import User, OAuthProvider
 from .course import Language, Course, Section, Unit, Lesson, LessonPrerequisite
+from .exercise import ExerciseType, Exercise, ExerciseOption, LessonExercise, AudioFile
+from .progress import UserCourse, UserLessonProgress, UserExerciseInteraction
+from .gamification import UserDailyXP, UserHeartsLog, Achievement, UserAchievement
+from .audit import UserActivityLog, SystemAuditLog
 
 __all__ = [
     'BaseModel',
@@ -23,4 +27,18 @@ __all__ = [
     'Unit',
     'Lesson',
     'LessonPrerequisite',
+    'ExerciseType',
+    'Exercise',
+    'ExerciseOption',
+    'LessonExercise',
+    'AudioFile',
+    'UserCourse',
+    'UserLessonProgress',
+    'UserExerciseInteraction',
+    'UserDailyXP',
+    'UserHeartsLog',
+    'Achievement',
+    'UserAchievement',
+    'UserActivityLog',
+    'SystemAuditLog',
 ]
