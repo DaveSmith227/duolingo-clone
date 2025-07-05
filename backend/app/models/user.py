@@ -13,6 +13,7 @@ from sqlalchemy import Column, String, Boolean, Integer, DateTime, Text, CheckCo
 from sqlalchemy.orm import relationship, validates
 
 from app.models.base import BaseModel, SoftDeleteModel
+from app.models.encrypted_fields import EncryptedString, HashedString
 
 
 class User(SoftDeleteModel):
@@ -234,15 +235,15 @@ class OAuthProvider(BaseModel):
     )
     
     access_token = Column(
-        String(1000),
+        EncryptedString(2000),  # Increased size for encrypted data
         nullable=True,
-        doc="OAuth access token"
+        doc="OAuth access token (encrypted)"
     )
     
     refresh_token = Column(
-        String(1000),
+        EncryptedString(2000),  # Increased size for encrypted data
         nullable=True,
-        doc="OAuth refresh token"
+        doc="OAuth refresh token (encrypted)"
     )
     
     token_expires_at = Column(

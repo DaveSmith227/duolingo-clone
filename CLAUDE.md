@@ -190,3 +190,5 @@ pytest app/tests/    # Run specific test directory
 - **Responsive Design**: Ensure mobile-first approach with proper breakpoints
 - **Performance**: Optimize for 3G networks and older devices
 - **Accessibility**: Implement proper ARIA labels and keyboard navigation
+
+- All documentation files must use kebab-case filenames and be stored in the 'docs' folder or its subfolders.

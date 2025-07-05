@@ -13,6 +13,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, Inte
 from sqlalchemy.orm import relationship, validates
 
 from app.models.base import BaseModel
+from app.models.encrypted_fields import EncryptedString, HashedString
 
 
 class SupabaseUser(BaseModel):
@@ -54,9 +55,9 @@ class SupabaseUser(BaseModel):
     )
     
     phone = Column(
-        String(50),
+        EncryptedString(100),  # Increased size for encrypted data
         nullable=True,
-        doc="Phone number from Supabase Auth"
+        doc="Phone number from Supabase Auth (encrypted)"
     )
     
     phone_verified = Column(
@@ -274,10 +275,10 @@ class AuthSession(BaseModel):
         doc="User agent string from session creation"
     )
     
-    ip_address = Column(
-        String(45),  # IPv6 max length
+    ip_address_hash = Column(
+        HashedString(64),  # SHA-256 hash
         nullable=True,
-        doc="IP address from session creation"
+        doc="Hashed IP address for privacy protection"
     )
     
     is_active = Column(
@@ -387,11 +388,11 @@ class AuthAuditLog(BaseModel):
         doc="Event result (success, failure, error)"
     )
     
-    ip_address = Column(
-        String(45),  # IPv6 max length
+    ip_address_hash = Column(
+        HashedString(64),  # SHA-256 hash
         nullable=True,
         index=True,
-        doc="IP address of the request"
+        doc="Hashed IP address for privacy protection"
     )
     
     user_agent = Column(
