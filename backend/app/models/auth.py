@@ -132,6 +132,13 @@ class SupabaseUser(BaseModel):
         doc="Authentication audit logs for this user"
     )
     
+    password_history = relationship(
+        "PasswordHistory",
+        back_populates="supabase_user",
+        cascade="all, delete-orphan",
+        doc="Password history for this user"
+    )
+    
     @validates('sync_status')
     def validate_sync_status(self, key, status):
         """Validate sync status."""
@@ -466,3 +473,92 @@ class AuthAuditLog(BaseModel):
     
     def __repr__(self) -> str:
         return f"<AuthAuditLog(id={self.id}, event_type={self.event_type}, result={self.event_result})>"
+
+
+class PasswordHistory(BaseModel):
+    """
+    Password history model for tracking previous passwords.
+    
+    Stores hashed previous passwords to prevent password reuse
+    and enforce password history policies.
+    """
+    
+    supabase_user_id = Column(
+        String(36),
+        ForeignKey('supabase_users.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+        doc="Foreign key to supabase_users table"
+    )
+    
+    password_hash = Column(
+        Text,
+        nullable=False,
+        doc="Hashed password using Argon2"
+    )
+    
+    hash_algorithm = Column(
+        String(20),
+        default='argon2',
+        nullable=False,
+        doc="Password hashing algorithm used"
+    )
+    
+    password_created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        doc="When this password was created"
+    )
+    
+    is_current = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="Whether this is the current active password"
+    )
+    
+    # Relationships
+    supabase_user = relationship(
+        "SupabaseUser",
+        back_populates="password_history",
+        doc="Supabase user associated with this password history"
+    )
+    
+    @validates('hash_algorithm')
+    def validate_hash_algorithm(self, key, algorithm):
+        """Validate password hashing algorithm."""
+        valid_algorithms = ['argon2', 'bcrypt', 'scrypt']
+        if algorithm not in valid_algorithms:
+            raise ValueError(f"Hash algorithm must be one of: {', '.join(valid_algorithms)}")
+        return algorithm
+    
+    @classmethod
+    def create_password_entry(
+        cls,
+        supabase_user_id: str,
+        password_hash: str,
+        algorithm: str = 'argon2',
+        is_current: bool = False
+    ) -> 'PasswordHistory':
+        """
+        Create password history entry.
+        
+        Args:
+            supabase_user_id: User ID
+            password_hash: Hashed password
+            algorithm: Hashing algorithm used
+            is_current: Whether this is the current password
+            
+        Returns:
+            PasswordHistory instance
+        """
+        return cls(
+            supabase_user_id=supabase_user_id,
+            password_hash=password_hash,
+            hash_algorithm=algorithm,
+            is_current=is_current
+        )
+    
+    def __repr__(self) -> str:
+        return f"<PasswordHistory(id={self.id}, user_id={self.supabase_user_id}, current={self.is_current})>"

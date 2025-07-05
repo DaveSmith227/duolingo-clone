@@ -64,6 +64,39 @@ class Settings(BaseSettings):
     redis_password: Optional[str] = None
     redis_db: int = 0
     
+    # Rate limiting settings
+    rate_limiting_enabled: bool = True
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_minutes: int = 15
+    login_lockout_duration_minutes: int = 30
+    password_reset_rate_limit_attempts: int = 3
+    password_reset_rate_limit_window_hours: int = 1
+    registration_rate_limit_attempts: int = 3
+    registration_rate_limit_window_hours: int = 1
+    
+    # Password security settings
+    password_min_length: int = 8
+    password_max_length: int = 128
+    password_require_uppercase: bool = True
+    password_require_lowercase: bool = True
+    password_require_digits: bool = True
+    password_require_special_chars: bool = True
+    password_prevent_common: bool = True
+    password_history_count: int = 5
+    password_expiry_days: Optional[int] = None  # None = no expiry
+    csrf_protection_enabled: bool = True
+    
+    # Account lockout settings
+    lockout_max_failed_attempts: int = 5
+    lockout_duration_minutes: int = 30
+    lockout_progressive_enabled: bool = True
+    lockout_max_duration_hours: int = 24
+    rapid_fire_threshold_seconds: int = 5
+    rapid_fire_max_attempts: int = 3
+    multiple_ip_threshold: int = 3
+    multiple_ip_window_hours: int = 1
+    permanent_lockout_threshold: int = 10
+    
     # External API settings
     openai_api_key: Optional[str] = None
     
