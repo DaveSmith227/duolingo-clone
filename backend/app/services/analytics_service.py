@@ -629,3 +629,134 @@ class AnalyticsService:
             query = query.filter(UserProgressSnapshot.course_id == course_id)
         
         return query.order_by(desc(UserProgressSnapshot.snapshot_date)).limit(30).all()
+    
+    def get_aggregated_metrics(
+        self,
+        date_start: Optional[datetime] = None,
+        date_end: Optional[datetime] = None,
+        course_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get aggregated analytics metrics for admin reporting.
+        
+        Args:
+            date_start: Start date for metrics calculation
+            date_end: End date for metrics calculation
+            course_id: Optional course filter
+            
+        Returns:
+            Dictionary with aggregated metrics
+        """
+        # Set default date range if not provided
+        if not date_end:
+            date_end = datetime.utcnow()
+        if not date_start:
+            date_start = date_end - timedelta(days=30)
+        
+        # Base query for the date range
+        base_query = self.db.query(AnalyticsEvent).filter(
+            AnalyticsEvent.event_timestamp >= date_start,
+            AnalyticsEvent.event_timestamp <= date_end
+        )
+        
+        if course_id:
+            base_query = base_query.filter(AnalyticsEvent.course_id == course_id)
+        
+        # Total events count
+        total_events = base_query.count()
+        
+        # Events by type
+        events_by_type = {}
+        type_results = base_query.with_entities(
+            AnalyticsEvent.event_type,
+            func.count(AnalyticsEvent.id).label('count')
+        ).group_by(AnalyticsEvent.event_type).all()
+        
+        for event_type, count in type_results:
+            events_by_type[event_type] = count
+        
+        # Events by category
+        events_by_category = {}
+        category_results = base_query.with_entities(
+            AnalyticsEvent.event_category,
+            func.count(AnalyticsEvent.id).label('count')
+        ).group_by(AnalyticsEvent.event_category).all()
+        
+        for category, count in category_results:
+            events_by_category[category] = count
+        
+        # Active users (distinct users with events in date range)
+        active_users = base_query.with_entities(
+            func.count(func.distinct(AnalyticsEvent.user_id))
+        ).scalar() or 0
+        
+        # Calculate engagement rate (learning events / total events)
+        learning_events = base_query.filter(
+            AnalyticsEvent.event_category == 'learning'
+        ).count()
+        engagement_rate = (learning_events / total_events * 100) if total_events > 0 else 0.0
+        
+        # Average session duration (from events with duration)
+        avg_duration_result = base_query.filter(
+            AnalyticsEvent.duration.isnot(None)
+        ).with_entities(
+            func.avg(AnalyticsEvent.duration)
+        ).scalar()
+        avg_session_duration = float(avg_duration_result) if avg_duration_result else 0.0
+        
+        # Completion rates by type
+        completion_rates = {}
+        
+        # Lesson completion rate
+        lesson_starts = base_query.filter(AnalyticsEvent.event_type == 'lesson_start').count()
+        lesson_completions = base_query.filter(AnalyticsEvent.event_type == 'lesson_complete').count()
+        if lesson_starts > 0:
+            completion_rates['lessons'] = (lesson_completions / lesson_starts) * 100
+        else:
+            completion_rates['lessons'] = 0.0
+        
+        # Exercise completion rate
+        exercise_attempts = base_query.filter(AnalyticsEvent.event_type == 'exercise_attempt').count()
+        exercise_completions = base_query.filter(AnalyticsEvent.event_type == 'exercise_complete').count()
+        if exercise_attempts > 0:
+            completion_rates['exercises'] = (exercise_completions / exercise_attempts) * 100
+        else:
+            completion_rates['exercises'] = 0.0
+        
+        # Top courses by activity
+        top_courses = []
+        if not course_id:  # Only show top courses if not filtering by specific course
+            course_activity = base_query.filter(
+                AnalyticsEvent.course_id.isnot(None)
+            ).with_entities(
+                AnalyticsEvent.course_id,
+                func.count(AnalyticsEvent.id).label('event_count'),
+                func.count(func.distinct(AnalyticsEvent.user_id)).label('unique_users')
+            ).group_by(AnalyticsEvent.course_id).order_by(
+                desc(func.count(AnalyticsEvent.id))
+            ).limit(10).all()
+            
+            for course_id_result, event_count, unique_users in course_activity:
+                # Try to get course name (would need Course model import)
+                top_courses.append({
+                    'course_id': course_id_result,
+                    'event_count': event_count,
+                    'unique_users': unique_users,
+                    'course_name': f"Course {course_id_result}"  # Placeholder
+                })
+        
+        return {
+            'total_events': total_events,
+            'events_by_type': events_by_type,
+            'events_by_category': events_by_category,
+            'active_users': active_users,
+            'engagement_rate': round(engagement_rate, 2),
+            'avg_session_duration': round(avg_session_duration, 2),
+            'completion_rates': completion_rates,
+            'top_courses': top_courses,
+            'date_range': {
+                'start': date_start,
+                'end': date_end
+            },
+            'last_updated': datetime.utcnow()
+        }
