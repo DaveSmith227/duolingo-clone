@@ -299,6 +299,13 @@ class AuthSession(BaseModel):
         doc="Reason for session invalidation"
     )
     
+    remember_me = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="Whether session uses extended duration (remember me)"
+    )
+    
     # Relationships
     supabase_user = relationship(
         "SupabaseUser",

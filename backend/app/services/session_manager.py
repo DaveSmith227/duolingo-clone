@@ -106,7 +106,8 @@ class SessionManager:
                 expires_at=datetime.now(timezone.utc) + access_expires,
                 refresh_expires_at=datetime.now(timezone.utc) + refresh_expires,
                 user_agent=user_agent,
-                ip_address=ip_address
+                ip_address=ip_address,
+                remember_me=remember_me
             )
             
             self.db.add(session)
@@ -133,7 +134,9 @@ class SessionManager:
                 "refresh_token": refresh_token,
                 "token_type": "bearer",
                 "expires_in": int(access_expires.total_seconds()),
+                "refresh_expires_in": int(refresh_expires.total_seconds()),
                 "session_id": session_id,
+                "remember_me": remember_me,
                 "user": {
                     "id": user.id,
                     "email": user.email,
@@ -213,8 +216,12 @@ class SessionManager:
             new_session_id = self._generate_session_id()
             token_data["session_id"] = new_session_id
             
+            # Preserve remember_me state for refresh token expiration
             access_expires = timedelta(minutes=self.settings.access_token_expire_minutes)
-            refresh_expires = timedelta(days=self.settings.refresh_token_expire_days)
+            if session.remember_me:
+                refresh_expires = timedelta(days=self.settings.remember_me_expire_days)
+            else:
+                refresh_expires = timedelta(days=self.settings.refresh_token_expire_days)
             
             new_access_token = create_access_token(token_data, access_expires)
             new_refresh_token = create_refresh_token(token_data, refresh_expires)
@@ -251,7 +258,9 @@ class SessionManager:
                 "refresh_token": new_refresh_token,
                 "token_type": "bearer",
                 "expires_in": int(access_expires.total_seconds()),
+                "refresh_expires_in": int(refresh_expires.total_seconds()),
                 "session_id": new_session_id,
+                "remember_me": session.remember_me,
                 "user": {
                     "id": user.id,
                     "email": user.email,

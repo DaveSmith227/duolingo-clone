@@ -25,6 +25,7 @@ class AuditEventType(Enum):
     # Authentication events
     LOGIN_SUCCESS = "login_success"
     LOGIN_FAILURE = "login_failure"
+    LOGIN_BLOCKED = "login_blocked"
     LOGOUT = "logout"
     LOGOUT_ALL = "logout_all"
     TOKEN_REFRESH = "token_refresh"

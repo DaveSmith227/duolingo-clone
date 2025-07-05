@@ -437,10 +437,9 @@ async def register(
             
             # Create initial session
             session_result = session_manager.create_session(
-                user_id=supabase_user_id,
+                user=app_user,
                 ip_address=client_info["ip_address"],
                 user_agent=client_info["user_agent"],
-                device_name=client_info.get("device_name"),
                 remember_me=False
             )
             
@@ -826,10 +825,9 @@ async def login(
         
         # Create session
         session_result = session_manager.create_session(
-            user_id=supabase_user.supabase_id,
+            user=user,
             ip_address=client_info["ip_address"],
             user_agent=client_info["user_agent"],
-            device_name=login_data.device_name,
             remember_me=login_data.remember_me
         )
         
@@ -858,7 +856,8 @@ async def login(
         cookie_manager.set_auth_cookies(
             response,
             session_result.access_token,
-            session_result.refresh_token
+            session_result.refresh_token,
+            remember_me=login_data.remember_me
         )
         
         # Create response
@@ -1103,10 +1102,9 @@ async def social_auth(
         
         # Create session
         session_result = session_manager.create_session(
-            user_id=supabase_user_id,
+            user=app_user,
             ip_address=client_info["ip_address"],
             user_agent=client_info["user_agent"],
-            device_name=social_data.device_name,
             remember_me=False  # Social auth defaults to standard session
         )
         
@@ -1359,28 +1357,303 @@ async def confirm_password_reset(
         )
 
 
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(refresh_data: RefreshTokenRequest, request: Request, response: Response, db: Session = Depends(get_db)):
-    """Token refresh endpoint - To be implemented"""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Token refresh endpoint not yet implemented"
-    )
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"model": ErrorResponse, "description": "Bad request"},
+        401: {"model": ErrorResponse, "description": "Invalid refresh token"},
+        422: {"model": ValidationErrorResponse, "description": "Validation error"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="Refresh authentication tokens",
+    description="Exchange a valid refresh token for new access and refresh tokens while preserving remember me state"
+)
+async def refresh_token(
+    refresh_data: RefreshTokenRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db)
+):
+    """
+    Refresh authentication tokens using refresh token.
+    
+    Exchanges a valid refresh token for new access and refresh tokens,
+    maintaining the remember_me state and session preferences.
+    
+    Args:
+        refresh_data: Refresh token request data
+        request: FastAPI request object
+        response: FastAPI response object
+        db: Database session
+        
+    Returns:
+        TokenResponse with new access and refresh tokens
+        
+    Raises:
+        HTTPException: For invalid tokens or server errors
+    """
+    client_info = get_client_info(request)
+    
+    # Initialize services
+    session_manager = get_session_manager(db)
+    audit_logger = get_audit_logger(db)
+    cookie_manager = get_cookie_manager()
+    
+    try:
+        # Try to get refresh token from cookie if not provided in body
+        refresh_token = refresh_data.refresh_token
+        if not refresh_token:
+            refresh_token = cookie_manager.get_refresh_token_from_cookie(request)
+        
+        if not refresh_token:
+            await audit_logger.log_authentication_event(
+                event_type=AuditEventType.TOKEN_REFRESH,
+                success=False,
+                ip_address=client_info["ip_address"],
+                user_agent=client_info["user_agent"],
+                error_message="No refresh token provided"
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "error": "missing_token",
+                    "message": "Refresh token is required."
+                }
+            )
+        
+        # Refresh the session
+        session_result = session_manager.refresh_session(
+            refresh_token=refresh_token,
+            ip_address=client_info["ip_address"],
+            user_agent=client_info["user_agent"]
+        )
+        
+        if not session_result:
+            await audit_logger.log_authentication_event(
+                event_type=AuditEventType.TOKEN_REFRESH,
+                success=False,
+                ip_address=client_info["ip_address"],
+                user_agent=client_info["user_agent"],
+                error_message="Invalid or expired refresh token"
+            )
+            
+            # Clear cookies on invalid refresh token
+            cookie_manager.clear_auth_cookies(response)
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "error": "invalid_token",
+                    "message": "Invalid or expired refresh token."
+                }
+            )
+        
+        # Log successful token refresh
+        await audit_logger.log_authentication_event(
+            event_type=AuditEventType.TOKEN_REFRESH,
+            success=True,
+            user_id=session_result["user"]["id"],
+            ip_address=client_info["ip_address"],
+            user_agent=client_info["user_agent"],
+            session_id=session_result["session_id"],
+            metadata={
+                "remember_me": session_result["remember_me"]
+            }
+        )
+        
+        # Set new cookies with appropriate expiration
+        cookie_manager.set_auth_cookies(
+            response,
+            session_result["access_token"],
+            session_result["refresh_token"],
+            remember_me=session_result["remember_me"]
+        )
+        
+        # Return new token pair
+        return TokenResponse(
+            access_token=session_result["access_token"],
+            refresh_token=session_result["refresh_token"],
+            token_type="bearer",
+            expires_in=session_result["expires_in"],
+            refresh_expires_in=session_result["refresh_expires_in"]
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    
+    except Exception as e:
+        logger.error(f"Unexpected token refresh error: {str(e)}")
+        
+        await audit_logger.log_authentication_event(
+            event_type=AuditEventType.TOKEN_REFRESH,
+            success=False,
+            ip_address=client_info["ip_address"],
+            user_agent=client_info["user_agent"],
+            error_message=f"Unexpected error: {str(e)}"
+        )
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "internal_error",
+                "message": "Token refresh failed. Please try again."
+            }
+        )
 
 
-@router.post("/logout", response_model=Dict[str, str])
+@router.post(
+    "/logout",
+    response_model=Dict[str, str],
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"model": ErrorResponse, "description": "Bad request"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="User logout with token invalidation",
+    description="Logout user and invalidate authentication tokens with optional logout from all devices"
+)
 async def logout(
     logout_data: LogoutRequest,
     request: Request,
     response: Response,
-    current_user_id: str = Depends(get_current_user_id),
+    current_user_payload: dict = Depends(get_current_user_payload),
     db: Session = Depends(get_db)
 ):
-    """Logout endpoint - To be implemented in Task 4.6"""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Logout endpoint not yet implemented"
-    )
+    """
+    User logout with token invalidation.
+    
+    Invalidates the current session or all user sessions based on request,
+    clears authentication cookies, and logs the logout event for audit purposes.
+    
+    Args:
+        logout_data: Logout request data
+        request: FastAPI request object
+        response: FastAPI response object
+        current_user_payload: Current user's JWT payload
+        db: Database session
+        
+    Returns:
+        Dictionary with logout confirmation message
+        
+    Raises:
+        HTTPException: For authentication errors or server errors
+    """
+    client_info = get_client_info(request)
+    
+    # Initialize services
+    session_manager = get_session_manager(db)
+    audit_logger = get_audit_logger(db)
+    cookie_manager = get_cookie_manager()
+    
+    try:
+        # Extract user information from token payload
+        user_id = current_user_payload.get("sub")
+        session_id = current_user_payload.get("session_id")
+        
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "error": "invalid_token",
+                    "message": "Invalid token payload."
+                }
+            )
+        
+        # Determine logout scope
+        if logout_data.logout_all_devices:
+            # Logout from all devices
+            invalidated_count = session_manager.invalidate_all_user_sessions(
+                user_id=user_id,
+                reason="logout_all_devices"
+            )
+            
+            # Log logout all devices event
+            await audit_logger.log_authentication_event(
+                event_type=AuditEventType.LOGOUT_ALL,
+                success=True,
+                user_id=user_id,
+                ip_address=client_info["ip_address"],
+                user_agent=client_info["user_agent"],
+                session_id=session_id,
+                metadata={
+                    "sessions_invalidated": invalidated_count,
+                    "logout_type": "all_devices"
+                }
+            )
+            
+            message = f"Successfully logged out from all devices. {invalidated_count} sessions invalidated."
+            
+        else:
+            # Logout from current session only
+            if session_id:
+                success = session_manager.invalidate_session(
+                    session_id=session_id,
+                    reason="logout"
+                )
+                
+                if not success:
+                    logger.warning(f"Failed to invalidate session {session_id} for user {user_id}")
+            
+            # Log single session logout event
+            await audit_logger.log_authentication_event(
+                event_type=AuditEventType.LOGOUT,
+                success=True,
+                user_id=user_id,
+                ip_address=client_info["ip_address"],
+                user_agent=client_info["user_agent"],
+                session_id=session_id,
+                metadata={
+                    "logout_type": "current_session"
+                }
+            )
+            
+            message = "Successfully logged out from current session."
+        
+        # Clear authentication cookies
+        cookie_manager.clear_auth_cookies(response)
+        
+        logger.info(f"User {user_id} logged out (all_devices: {logout_data.logout_all_devices})")
+        
+        return {
+            "message": message,
+            "logout_all_devices": logout_data.logout_all_devices,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    
+    except Exception as e:
+        logger.error(f"Unexpected logout error: {str(e)}")
+        
+        # Try to log the error event if we have user info
+        try:
+            user_id = current_user_payload.get("sub")
+            if user_id:
+                await audit_logger.log_authentication_event(
+                    event_type=AuditEventType.LOGOUT,
+                    success=False,
+                    user_id=user_id,
+                    ip_address=client_info["ip_address"],
+                    user_agent=client_info["user_agent"],
+                    error_message=f"Logout error: {str(e)}"
+                )
+        except Exception:
+            pass  # Don't fail on audit logging
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "internal_error",
+                "message": "Logout failed. Please try again."
+            }
+        )
 
 
 @router.get("/me", response_model=UserResponse)
