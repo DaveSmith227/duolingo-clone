@@ -12,6 +12,7 @@ from .exercise import ExerciseType, Exercise, ExerciseOption, LessonExercise, Au
 from .progress import UserCourse, UserLessonProgress, UserExerciseInteraction
 from .gamification import UserDailyXP, UserHeartsLog, Achievement, UserAchievement
 from .audit import UserActivityLog, SystemAuditLog
+from .analytics import AnalyticsEvent, UserProgressSnapshot, UserLearningStats, EventType
 
 __all__ = [
     'BaseModel',
@@ -41,4 +42,8 @@ __all__ = [
     'UserAchievement',
     'UserActivityLog',
     'SystemAuditLog',
+    'AnalyticsEvent',
+    'UserProgressSnapshot',
+    'UserLearningStats',
+    'EventType',
 ]

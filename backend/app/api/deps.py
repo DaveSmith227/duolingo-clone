@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_database_session
 from app.core.security import verify_access_token, extract_token_from_header
+from app.models.user import User
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -92,6 +93,34 @@ def get_current_user_id(
     
     logger.debug(f"Authenticated user: {user_id}")
     return user_id
+
+
+def get_current_user(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id)
+) -> User:
+    """
+    Dependency to get current authenticated user object.
+    
+    Args:
+        db: Database session
+        user_id: Authenticated user ID
+        
+    Returns:
+        User object from database
+        
+    Raises:
+        HTTPException: If user not found
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return user
 
 
 def get_current_user_payload(

@@ -135,6 +135,13 @@ def setup_middleware(app: FastAPI, settings) -> None:
             allowed_hosts=["*"]  # Configure with actual allowed hosts in production
         )
     
+    # Rate limiting middleware (should be added early in the middleware stack)
+    from app.middleware.rate_limiting import RateLimitMiddleware
+    app.add_middleware(
+        RateLimitMiddleware,
+        excluded_paths=["/docs", "/redoc", "/openapi.json", "/favicon.ico", "/", "/info"]
+    )
+    
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -148,8 +155,19 @@ def setup_middleware(app: FastAPI, settings) -> None:
             "Content-Type",
             "Authorization",
             "X-Requested-With",
+            "X-Request-ID",
         ],
-        expose_headers=["X-Process-Time"],
+        expose_headers=[
+            "X-Process-Time", 
+            "X-RateLimit-Limit", 
+            "X-RateLimit-Remaining", 
+            "X-RateLimit-Reset",
+            "X-RateLimit-Window",
+            "X-RateLimit-Type",
+            "X-Request-ID",
+            "X-Timestamp",
+            "X-API-Version"
+        ],
     )
     
     # Request logging middleware
@@ -261,6 +279,14 @@ def setup_routes(app: FastAPI) -> None:
     # Include admin router
     from app.api.admin import router as admin_router
     app.include_router(admin_router)
+    
+    # Include analytics router
+    from app.api.analytics import router as analytics_router
+    app.include_router(analytics_router)
+    
+    # Include users router
+    from app.api.users import router as users_router
+    app.include_router(users_router)
     
     @app.get("/", tags=["Root"])
     async def root() -> Dict[str, Any]:
