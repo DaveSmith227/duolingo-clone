@@ -61,6 +61,28 @@ class Settings(BaseSettings):
     # External API settings
     openai_api_key: Optional[str] = None
     
+    # Supabase settings
+    supabase_url: Optional[str] = None
+    supabase_anon_key: Optional[str] = None
+    supabase_service_role_key: Optional[str] = None
+    supabase_jwt_secret: Optional[str] = None
+    
+    # OAuth provider settings
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    apple_client_id: Optional[str] = None
+    apple_team_id: Optional[str] = None
+    apple_key_id: Optional[str] = None
+    apple_private_key_path: Optional[str] = None
+    facebook_app_id: Optional[str] = None
+    facebook_app_secret: Optional[str] = None
+    tiktok_client_key: Optional[str] = None
+    tiktok_client_secret: Optional[str] = None
+    
+    # OAuth redirect settings
+    frontend_url: str = "http://localhost:3000"
+    oauth_redirect_url: Optional[str] = None
+    
     # Logging settings
     log_level: str = "INFO"
     log_format: str = "json"  # json or text
@@ -91,6 +113,14 @@ class Settings(BaseSettings):
         # This validation will be handled at the model level
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters long")
+        return v
+    
+    @field_validator("supabase_url")
+    @classmethod
+    def validate_supabase_url(cls, v):
+        """Validate Supabase URL format."""
+        if v and not v.startswith("https://"):
+            raise ValueError("SUPABASE_URL must start with https://")
         return v
     
     
@@ -141,6 +171,26 @@ class Settings(BaseSettings):
     def is_testing(self) -> bool:
         """Check if running in test environment."""
         return self.environment == "test"
+    
+    @property
+    def oauth_callback_url(self) -> str:
+        """
+        Build OAuth callback URL.
+        
+        Returns configured OAUTH_REDIRECT_URL if provided, otherwise builds from frontend URL.
+        """
+        if self.oauth_redirect_url:
+            return self.oauth_redirect_url
+        return f"{self.frontend_url}/auth/callback"
+    
+    @property
+    def has_supabase_config(self) -> bool:
+        """Check if Supabase configuration is complete."""
+        return all([
+            self.supabase_url,
+            self.supabase_anon_key,
+            self.supabase_service_role_key
+        ])
     
     model_config = SettingsConfigDict(
         env_file=".env",
