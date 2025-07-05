@@ -398,7 +398,7 @@ class AuthAuditLog(BaseModel):
         doc="Error message if event failed"
     )
     
-    metadata = Column(
+    event_metadata = Column(
         JSON,
         nullable=True,
         doc="Additional event metadata"

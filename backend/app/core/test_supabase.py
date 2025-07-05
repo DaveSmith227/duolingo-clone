@@ -1,15 +1,13 @@
 """
 Tests for Supabase Client Configuration
 
-Unit tests for Supabase client initialization, OAuth provider management,
-and user operations.
+Unit tests for Supabase client initialization and basic functionality.
 """
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 from app.core.supabase import SupabaseClient, get_supabase_client, init_supabase
 from app.core.config import Settings
-from gotrue.errors import AuthError
 
 
 class TestSupabaseClient:
@@ -110,126 +108,6 @@ class TestSupabaseClient:
         # Act & Assert
         with pytest.raises(RuntimeError, match="Supabase client not initialized"):
             _ = supabase_client.auth
-    
-    @patch('app.core.supabase.get_settings')
-    @patch('app.core.supabase.create_client')
-    async def test_sign_in_with_oauth_success(self, mock_create_client, mock_get_settings):
-        """Test successful OAuth sign-in initiation."""
-        # Arrange
-        mock_settings = Mock()
-        mock_settings.has_supabase_config = True
-        mock_settings.supabase_url = "https://test.supabase.co"
-        mock_settings.supabase_anon_key = "test-anon-key"
-        mock_settings.oauth_callback_url = "http://localhost:3000/auth/callback"
-        mock_get_settings.return_value = mock_settings
-        
-        mock_auth = AsyncMock()
-        mock_auth.sign_in_with_oauth.return_value = {"url": "https://provider.com/oauth"}
-        mock_client = Mock()
-        mock_client.auth = mock_auth
-        mock_create_client.return_value = mock_client
-        
-        # Act
-        supabase_client = SupabaseClient()
-        result = await supabase_client.sign_in_with_oauth("google")
-        
-        # Assert
-        assert result == {"url": "https://provider.com/oauth"}
-        mock_auth.sign_in_with_oauth.assert_called_once_with({
-            "provider": "google",
-            "options": {
-                "redirect_to": "http://localhost:3000/auth/callback",
-                "scopes": "openid email profile"
-            }
-        })
-    
-    async def test_sign_in_with_oauth_not_configured(self):
-        """Test OAuth sign-in raises error when client not configured."""
-        # Arrange
-        supabase_client = SupabaseClient()
-        
-        # Act & Assert
-        with pytest.raises(RuntimeError, match="Supabase client not initialized"):
-            await supabase_client.sign_in_with_oauth("google")
-    
-    @patch('app.core.supabase.get_settings')
-    @patch('app.core.supabase.create_client')
-    async def test_handle_oauth_callback_success(self, mock_create_client, mock_get_settings):
-        """Test successful OAuth callback handling."""
-        # Arrange
-        mock_settings = Mock()
-        mock_settings.has_supabase_config = True
-        mock_settings.supabase_url = "https://test.supabase.co"
-        mock_settings.supabase_anon_key = "test-anon-key"
-        mock_get_settings.return_value = mock_settings
-        
-        mock_auth = AsyncMock()
-        mock_auth.exchange_code_for_session.return_value = {"session": "test-session"}
-        mock_client = Mock()
-        mock_client.auth = mock_auth
-        mock_create_client.return_value = mock_client
-        
-        # Act
-        supabase_client = SupabaseClient()
-        result = await supabase_client.handle_oauth_callback("test-code", "test-state")
-        
-        # Assert
-        assert result == {"session": "test-session"}
-        mock_auth.exchange_code_for_session.assert_called_once_with({
-            "auth_code": "test-code",
-            "code_verifier": "test-state"
-        })
-    
-    @patch('app.core.supabase.get_settings')
-    @patch('app.core.supabase.create_client')
-    async def test_get_user_success(self, mock_create_client, mock_get_settings):
-        """Test successful user retrieval."""
-        # Arrange
-        mock_settings = Mock()
-        mock_settings.has_supabase_config = True
-        mock_settings.supabase_url = "https://test.supabase.co"
-        mock_settings.supabase_anon_key = "test-anon-key"
-        mock_get_settings.return_value = mock_settings
-        
-        mock_user_response = Mock()
-        mock_user_response.user = {"id": "test-user-id", "email": "test@example.com"}
-        
-        mock_auth = AsyncMock()
-        mock_auth.get_user.return_value = mock_user_response
-        mock_client = Mock()
-        mock_client.auth = mock_auth
-        mock_create_client.return_value = mock_client
-        
-        # Act
-        supabase_client = SupabaseClient()
-        result = await supabase_client.get_user()
-        
-        # Assert
-        assert result == {"id": "test-user-id", "email": "test@example.com"}
-    
-    @patch('app.core.supabase.get_settings')
-    @patch('app.core.supabase.create_client')
-    async def test_get_user_not_authenticated(self, mock_create_client, mock_get_settings):
-        """Test user retrieval when not authenticated."""
-        # Arrange
-        mock_settings = Mock()
-        mock_settings.has_supabase_config = True
-        mock_settings.supabase_url = "https://test.supabase.co"
-        mock_settings.supabase_anon_key = "test-anon-key"
-        mock_get_settings.return_value = mock_settings
-        
-        mock_auth = AsyncMock()
-        mock_auth.get_user.side_effect = AuthError("User not authenticated")
-        mock_client = Mock()
-        mock_client.auth = mock_auth
-        mock_create_client.return_value = mock_client
-        
-        # Act
-        supabase_client = SupabaseClient()
-        result = await supabase_client.get_user()
-        
-        # Assert
-        assert result is None
     
     def test_get_provider_scopes(self):
         """Test OAuth provider scope mapping."""

@@ -98,7 +98,7 @@ class Role(BaseModel):
         doc="Role priority for conflict resolution (higher = more priority)"
     )
     
-    metadata = Column(
+    role_metadata = Column(
         JSON,
         nullable=True,
         doc="Additional role metadata"
@@ -180,7 +180,7 @@ class Role(BaseModel):
             'role_type': self.role_type.value,
             'role_priority': self.priority,
             'permissions': [perm.name for perm in self.permissions],
-            'role_metadata': self.metadata or {}
+            'role_metadata': self.role_metadata or {}
         }
     
     def __repr__(self) -> str:
@@ -235,7 +235,7 @@ class Permission(BaseModel):
         doc="Whether permission is active"
     )
     
-    metadata = Column(
+    permission_metadata = Column(
         JSON,
         nullable=True,
         doc="Additional permission metadata"

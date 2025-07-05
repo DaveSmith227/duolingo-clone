@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.user import User, OAuthProvider
 from app.models.auth import SupabaseUser, AuthAuditLog
 from app.core.supabase import get_supabase_client
-from app.core.database import get_db
+from app.core.database import get_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -382,5 +382,5 @@ def get_user_sync_service(db: Session = None) -> UserSyncService:
         UserSyncService instance
     """
     if db is None:
-        db = next(get_db())
+        db = next(get_db_session())
     return UserSyncService(db)

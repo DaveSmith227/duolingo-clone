@@ -7,10 +7,56 @@ and audit logging models.
 
 import pytest
 from datetime import datetime, timezone, timedelta
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 
+from app.models.base import Base
 from app.models.auth import SupabaseUser, AuthSession, AuthAuditLog
 from app.models.user import User
+
+
+@pytest.fixture
+def db_engine():
+    """Create an in-memory SQLite database for testing."""
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    Base.metadata.create_all(engine)
+    return engine
+
+
+@pytest.fixture
+def db_session(db_engine):
+    """Create a database session for testing."""
+    Session = sessionmaker(bind=db_engine)
+    session = Session()
+    yield session
+    session.close()
+
+
+@pytest.fixture
+def sample_user(db_session):
+    """Create a sample user for testing."""
+    user = User(
+        email="test@example.com",
+        name="Test User"
+    )
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+
+@pytest.fixture
+def sample_supabase_user(db_session, sample_user):
+    """Create a sample Supabase user for testing."""
+    supabase_user = SupabaseUser(
+        supabase_id='550e8400-e29b-41d4-a716-446655440000',
+        app_user_id=sample_user.id,
+        email='test@example.com',
+        provider='email'
+    )
+    db_session.add(supabase_user)
+    db_session.commit()
+    return supabase_user
 
 
 class TestSupabaseUser:

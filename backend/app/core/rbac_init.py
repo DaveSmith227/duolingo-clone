@@ -13,7 +13,7 @@ from app.models.rbac import (
     Role, Permission, RoleType, PermissionScope,
     DEFAULT_ROLES, DEFAULT_PERMISSIONS, role_permissions
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -367,7 +367,7 @@ def initialize_rbac(db: Session = None) -> bool:
     """
     try:
         if db is None:
-            db = next(get_db())
+            db = next(get_db_session())
         
         initializer = RBACInitializer(db)
         initializer.initialize_rbac_system()

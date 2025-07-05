@@ -49,9 +49,7 @@ class SupabaseClient:
             # Configure client options for enhanced security
             options = ClientOptions(
                 auto_refresh_token=True,
-                persist_session=True,
-                detect_session_in_url=False,  # We handle OAuth callbacks manually
-                flow_type="pkce"  # Use PKCE for enhanced security
+                persist_session=True
             )
             
             self._client = create_client(

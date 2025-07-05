@@ -7,12 +7,71 @@ and user role assignments.
 
 import pytest
 from datetime import datetime, timezone, timedelta
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 
+from app.models.base import Base
 from app.models.rbac import (
     Role, Permission, UserRoleAssignment, RoleType, PermissionScope
 )
 from app.models.user import User
+
+
+@pytest.fixture
+def db_engine():
+    """Create an in-memory SQLite database for testing."""
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    Base.metadata.create_all(engine)
+    return engine
+
+
+@pytest.fixture
+def db_session(db_engine):
+    """Create a database session for testing."""
+    Session = sessionmaker(bind=db_engine)
+    session = Session()
+    yield session
+    session.close()
+
+
+@pytest.fixture
+def sample_user(db_session):
+    """Create a sample user for testing."""
+    user = User(
+        email="test@example.com",
+        name="Test User"
+    )
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+
+@pytest.fixture
+def sample_role(db_session):
+    """Create a sample role for testing."""
+    role = Role(
+        name='test_role',
+        display_name='Test Role',
+        role_type=RoleType.CUSTOM,
+        priority=100
+    )
+    db_session.add(role)
+    db_session.commit()
+    return role
+
+
+@pytest.fixture
+def sample_permission(db_session):
+    """Create a sample permission for testing."""
+    permission = Permission(
+        name='test.permission',
+        display_name='Test Permission',
+        scope=PermissionScope.GLOBAL
+    )
+    db_session.add(permission)
+    db_session.commit()
+    return permission
 
 
 class TestRole:
@@ -147,7 +206,7 @@ class TestRole:
             description='A test role',
             role_type=RoleType.CUSTOM,
             priority=100,
-            metadata={'custom_field': 'custom_value'}
+            role_metadata={'custom_field': 'custom_value'}
         )
         
         role.permissions.append(sample_permission)

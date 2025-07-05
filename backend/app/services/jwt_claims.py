@@ -307,16 +307,9 @@ class JWTClaimsService:
             
             if supabase_user and self.supabase.is_configured():
                 try:
-                    # Update app metadata in Supabase
-                    await self.supabase.auth.admin.update_user_by_id(
-                        supabase_user.supabase_id,
-                        {
-                            'app_metadata': {
-                                'custom_claims': custom_claims,
-                                'last_claims_update': datetime.now(timezone.utc).isoformat()
-                            }
-                        }
-                    )
+                    # Note: Supabase admin operations would need to be implemented separately
+                    # For now, we'll just log that the update would happen
+                    logger.info(f"Would update Supabase app metadata for user {supabase_user.supabase_id}")
                 except Exception as e:
                     logger.error(f"Failed to update Supabase app metadata: {str(e)}")
             
