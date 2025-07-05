@@ -13,6 +13,7 @@ from sqlalchemy import Column, String, Boolean, Integer, DateTime, Text, CheckCo
 from sqlalchemy.orm import validates
 
 from app.models.base import BaseModel
+from app.models.encrypted_fields import HashedString, EncryptedText
 
 
 class ActionType(str, Enum):
@@ -88,10 +89,10 @@ class UserActivityLog(BaseModel):
         doc="Human-readable description of the action"
     )
     
-    ip_address = Column(
-        String(45),  # IPv6 max length
+    ip_address_hash = Column(
+        HashedString(64),  # SHA-256 hash length
         nullable=True,
-        doc="IP address from which the action was performed"
+        doc="Hashed IP address for privacy protection"
     )
     
     user_agent = Column(
@@ -173,20 +174,11 @@ class UserActivityLog(BaseModel):
             raise ValueError(f"Invalid action type: {value}")
         return value
     
-    @validates('ip_address')
-    def validate_ip_address(self, key, value):
-        """Validate IP address format."""
-        if value is None:
-            return None
-        
-        value = str(value).strip()
-        if len(value) == 0:
-            return None
-        
-        # Basic validation - just check length and basic format
-        if len(value) > 45:  # Max IPv6 length
-            raise ValueError("IP address too long")
-        
+    @validates('ip_address_hash')
+    def validate_ip_address_hash(self, key, value):
+        """Validate IP address hash."""
+        # HashedString handles hashing automatically
+        # Just return the value
         return value
     
     @validates('duration_ms')
@@ -257,7 +249,7 @@ class UserActivityLog(BaseModel):
             user_id=user_id,
             action_type=action_type,
             description=description,
-            ip_address=ip_address,
+            ip_address_hash=ip_address,  # HashedString will hash it automatically
             user_agent=user_agent,
             session_id=session_id,
             course_id=course_id,
@@ -319,10 +311,10 @@ class SystemAuditLog(BaseModel):
         doc="Description of the administrative action"
     )
     
-    ip_address = Column(
-        String(45),
+    ip_address_hash = Column(
+        HashedString(64),
         nullable=True,
-        doc="IP address from which the action was performed"
+        doc="Hashed IP address for privacy protection"
     )
     
     user_agent = Column(
@@ -344,17 +336,17 @@ class SystemAuditLog(BaseModel):
         doc="Error message if action failed"
     )
     
-    # Store before/after state for change tracking
+    # Store before/after state for change tracking (encrypted for privacy)
     before_state = Column(
-        Text,
+        EncryptedText,
         nullable=True,
-        doc="State before the change (JSON format)"
+        doc="State before the change (JSON format, encrypted)"
     )
     
     after_state = Column(
-        Text,
+        EncryptedText,
         nullable=True,
-        doc="State after the change (JSON format)"
+        doc="State after the change (JSON format, encrypted)"
     )
     
     # Additional context data

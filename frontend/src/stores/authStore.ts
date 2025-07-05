@@ -1,57 +1,36 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import { AuthSession, User } from '@supabase/supabase-js'
-import { supabase, auth } from '@/lib/supabase'
-import { secureSessionStore, SessionTimeoutManager } from '@/lib/secureStorage'
+import { persist } from 'zustand/middleware'
+import { createSupabaseClient } from '@/lib/supabase/client'
+import { SessionTimeoutManager } from '@/lib/auth/session-timeout'
+import { secureSessionStore } from '@/lib/auth/secure-storage'
+import type { Session, User } from '@supabase/supabase-js'
 
-/**
- * Parse role from JWT token claims
- * This ensures role comes from server-validated token, not client-controlled metadata
- */
-function parseRoleFromToken(accessToken: string): string {
-  try {
-    // JWT structure: header.payload.signature
-    const parts = accessToken.split('.')
-    if (parts.length !== 3) return 'user'
-    
-    // Decode base64url payload
-    const payload = parts[1]
-    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
-    const claims = JSON.parse(decoded)
-    
-    // Extract role from token claims (set by backend)
-    return claims.role || claims.user_role || 'user'
-  } catch (error) {
-    console.error('Failed to parse token role:', error)
-    return 'user'
-  }
-}
+const { auth } = createSupabaseClient()
+
+// SECURITY FIX: Remove client-side JWT parsing
+// User roles and permissions should ONLY come from the server
 
 export interface AuthUser extends User {
   firstName?: string
   lastName?: string
   profilePicture?: string
-  role?: string
+  role?: string  // This should come from server response, not JWT parsing
   isEmailVerified?: boolean
   lastLoginAt?: string
 }
 
 export interface AuthState {
-  // Core auth state
+  // State
   user: AuthUser | null
-  session: AuthSession | null
+  session: Session | null
   isLoading: boolean
   isInitialized: boolean
-  
-  // Error state
   error: string | null
-  
-  // User preferences
   rememberMe: boolean
   
   // Actions
   setUser: (user: AuthUser | null) => void
-  setSession: (session: AuthSession | null) => void
+  setSession: (session: Session | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   setRememberMe: (remember: boolean) => void
@@ -68,6 +47,9 @@ export interface AuthState {
   isAuthenticated: () => boolean
   hasRole: (role: string) => boolean
   updateUserProfile: (updates: Partial<AuthUser>) => void
+  
+  // NEW: Secure method to fetch user details from server
+  fetchUserDetails: () => Promise<void>
 }
 
 const initialState = {
@@ -105,7 +87,7 @@ const secureStorage = {
               email: state.user.email,
               firstName: state.user.firstName,
               lastName: state.user.lastName,
-              role: state.user.role,
+              // Don't store role - fetch from server
               isEmailVerified: state.user.isEmailVerified
             } : null
           }
@@ -128,69 +110,93 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       ...initialState,
 
-      // Setters
+      // Actions
       setUser: (user) => set({ user }),
       setSession: (session) => set({ session }),
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
       setRememberMe: (rememberMe) => set({ rememberMe }),
 
-      // Auth methods
-      signIn: async (email: string, password: string, rememberMe = false) => {
-        set({ isLoading: true, error: null })
-        
+      // SECURE: Fetch user details from server
+      fetchUserDetails: async () => {
+        const { session } = get()
+        if (!session) return
+
         try {
-          const { user, session, error } = await auth.signIn({
-            email,
-            password,
-            rememberMe
+          // Make authenticated request to get user details including role
+          const response = await fetch('/api/auth/me', {
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json'
+            }
           })
 
+          if (response.ok) {
+            const userData = await response.json()
+            
+            // Update user with server-provided data
+            set({
+              user: {
+                ...get().user,
+                role: userData.role,  // Role from server, not JWT
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                isEmailVerified: userData.isEmailVerified
+              } as AuthUser
+            })
+          }
+        } catch (error) {
+          console.error('Failed to fetch user details:', error)
+        }
+      },
+
+      signIn: async (email: string, password: string, rememberMe = false) => {
+        set({ isLoading: true, error: null, rememberMe })
+        
+        try {
+          const { user, session, error } = await auth.signIn({ email, password })
+          
           if (error) {
             set({ error, isLoading: false })
             throw new Error(error)
           }
 
           if (user && session) {
-            // Role should come from JWT claims, not user metadata
-            // The backend should set the role in the token claims
-            const tokenRole = session.access_token ? parseRoleFromToken(session.access_token) : 'user'
-            
+            // Create initial user object
             const authUser: AuthUser = {
               ...user,
               firstName: user.user_metadata?.first_name,
               lastName: user.user_metadata?.last_name,
               profilePicture: user.user_metadata?.avatar_url,
-              role: tokenRole, // Use server-validated role from token
-              isEmailVerified: user.email_confirmed_at !== null,
-              lastLoginAt: new Date().toISOString()
+              // Don't parse role from JWT
+              isEmailVerified: user.email_confirmed_at !== null
             }
 
             set({
               user: authUser,
               session,
               isLoading: false,
-              error: null,
-              rememberMe
+              error: null
             })
-            
-            // Initialize session timeout (30 min timeout, 5 min warning)
-            if (!sessionTimeoutManager) {
-              sessionTimeoutManager = new SessionTimeoutManager(
-                30, // timeout minutes
-                5,  // warning minutes
-                async () => {
-                  // Session timeout - sign out user
-                  console.warn('Session timed out due to inactivity')
-                  await get().signOut()
+
+            // Fetch full user details from server
+            await get().fetchUserDetails()
+
+            // Setup session timeout if remember me is not enabled
+            if (!rememberMe && session) {
+              sessionTimeoutManager = new SessionTimeoutManager({
+                timeout: 30 * 60 * 1000, // 30 minutes
+                warningTime: 5 * 60 * 1000, // 5 minute warning
+                onTimeout: () => {
+                  get().signOut()
                 },
-                (remainingTime) => {
-                  // Warning callback - could show a warning modal
-                  console.warn(`Session will expire in ${Math.ceil(remainingTime / 60000)} minutes`)
+                onWarning: () => {
+                  // Could show a warning modal here
+                  console.warn('Session will expire soon')
                 }
-              )
+              })
+              sessionTimeoutManager.start()
             }
-            sessionTimeoutManager.start()
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Sign in failed'
@@ -222,7 +228,7 @@ export const useAuthStore = create<AuthState>()(
             const authUser: AuthUser = {
               ...user,
               firstName,
-              role: 'user',
+              role: 'user',  // Default role for new users
               isEmailVerified: user.email_confirmed_at !== null
             }
 
@@ -289,11 +295,14 @@ export const useAuthStore = create<AuthState>()(
               firstName: user.user_metadata?.first_name,
               lastName: user.user_metadata?.last_name,
               profilePicture: user.user_metadata?.avatar_url,
-              role: session ? parseRoleFromToken(session.access_token) : 'user',
+              // Don't parse role from JWT
               isEmailVerified: user.email_confirmed_at !== null
             }
 
             set({ user: authUser, session })
+            
+            // Fetch updated user details from server
+            await get().fetchUserDetails()
           }
         } catch (error) {
           console.warn('Session refresh error:', error)
@@ -301,103 +310,89 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      // Initialization
       initialize: async () => {
         if (get().isInitialized) return
-
+        
         set({ isLoading: true })
-
+        
         try {
-          // Get current session
-          const { session, error } = await auth.getSession()
+          // Check for existing session
+          const { data: { session, user } } = await auth.getSession()
           
-          if (error) {
-            console.warn('Failed to get session:', error)
-            set({ isLoading: false, isInitialized: true })
-            return
-          }
-
-          if (session?.user) {
+          if (session && user) {
             const authUser: AuthUser = {
-              ...session.user,
-              firstName: session.user.user_metadata?.first_name,
-              lastName: session.user.user_metadata?.last_name,
-              profilePicture: session.user.user_metadata?.avatar_url,
-              role: parseRoleFromToken(session.access_token),
-              isEmailVerified: session.user.email_confirmed_at !== null
+              ...user,
+              firstName: user.user_metadata?.first_name,
+              lastName: user.user_metadata?.last_name,
+              profilePicture: user.user_metadata?.avatar_url,
+              // Don't parse role from JWT
+              isEmailVerified: user.email_confirmed_at !== null
             }
 
-            set({
-              user: authUser,
+            set({ 
+              user: authUser, 
               session,
-              isLoading: false,
-              isInitialized: true
+              isInitialized: true,
+              isLoading: false
             })
+            
+            // Fetch full user details from server
+            await get().fetchUserDetails()
+            
+            // Setup session timeout if not remember me
+            const { rememberMe } = get()
+            if (!rememberMe && session) {
+              sessionTimeoutManager = new SessionTimeoutManager({
+                timeout: 30 * 60 * 1000,
+                warningTime: 5 * 60 * 1000,
+                onTimeout: () => {
+                  get().signOut()
+                },
+                onWarning: () => {
+                  console.warn('Session will expire soon')
+                }
+              })
+              sessionTimeoutManager.start()
+            }
           } else {
-            set({
-              user: null,
-              session: null,
-              isLoading: false,
-              isInitialized: true
-            })
+            set({ isInitialized: true, isLoading: false })
           }
 
-          // Set up auth state change listener
-          supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log('Auth state changed:', event, session?.user?.id)
-
-            if (event === 'SIGNED_IN' && session?.user) {
+          // Listen for auth state changes
+          auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+              const user = session.user
               const authUser: AuthUser = {
-                ...session.user,
-                firstName: session.user.user_metadata?.first_name,
-                lastName: session.user.user_metadata?.last_name,
-                profilePicture: session.user.user_metadata?.avatar_url,
-                role: parseRoleFromToken(session.access_token),
-                isEmailVerified: session.user.email_confirmed_at !== null
+                ...user,
+                firstName: user.user_metadata?.first_name,
+                lastName: user.user_metadata?.last_name,
+                profilePicture: user.user_metadata?.avatar_url,
+                // Don't parse role from JWT
+                isEmailVerified: user.email_confirmed_at !== null
               }
 
-              set({ user: authUser, session, error: null })
+              set({ user: authUser, session })
+              
+              // Fetch full user details from server
+              await get().fetchUserDetails()
             } else if (event === 'SIGNED_OUT') {
-              set({ user: null, session: null, error: null })
-            } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-              const authUser: AuthUser = {
-                ...session.user,
-                firstName: session.user.user_metadata?.first_name,
-                lastName: session.user.user_metadata?.last_name,
-                profilePicture: session.user.user_metadata?.avatar_url,
-                role: parseRoleFromToken(session.access_token),
-                isEmailVerified: session.user.email_confirmed_at !== null
-              }
-
-              set({ user: authUser, session })
-            } else if (event === 'USER_UPDATED' && session?.user) {
-              const authUser: AuthUser = {
-                ...session.user,
-                firstName: session.user.user_metadata?.first_name,
-                lastName: session.user.user_metadata?.last_name,
-                profilePicture: session.user.user_metadata?.avatar_url,
-                role: parseRoleFromToken(session.access_token),
-                isEmailVerified: session.user.email_confirmed_at !== null
-              }
-
-              set({ user: authUser, session })
+              set({ user: null, session: null })
+            } else if (event === 'TOKEN_REFRESHED' && session) {
+              set({ session })
+              
+              // Fetch updated user details from server
+              await get().fetchUserDetails()
             }
           })
-
         } catch (error) {
-          console.error('Auth initialization failed:', error)
-          set({
-            user: null,
-            session: null,
-            isLoading: false,
-            isInitialized: true,
-            error: error instanceof Error ? error.message : 'Initialization failed'
-          })
+          console.error('Auth initialization error:', error)
+          set({ error: 'Failed to initialize auth', isLoading: false, isInitialized: true })
         }
       },
 
-      // Utility methods
-      reset: () => set(initialState),
+      reset: () => {
+        set(initialState)
+      },
 
       isAuthenticated: () => {
         const { user, session } = get()
@@ -406,7 +401,7 @@ export const useAuthStore = create<AuthState>()(
 
       hasRole: (role: string) => {
         const { user } = get()
-        return user?.role === role || user?.role === 'admin'
+        return user?.role === role
       },
 
       updateUserProfile: (updates: Partial<AuthUser>) => {
@@ -417,63 +412,21 @@ export const useAuthStore = create<AuthState>()(
       }
     }),
     {
-      name: 'duolingo-auth-store',
-      storage: createJSONStorage(() => secureStorage),
+      name: 'auth-storage',
+      storage: secureStorage,
       partialize: (state) => ({
-        // Only persist non-sensitive data
-        user: state.user ? {
-          id: state.user.id,
-          email: state.user.email,
-          firstName: state.user.firstName,
-          lastName: state.user.lastName,
-          profilePicture: state.user.profilePicture,
-          role: state.user.role,
-          isEmailVerified: state.user.isEmailVerified,
-          lastLoginAt: state.user.lastLoginAt
-        } : null,
         rememberMe: state.rememberMe,
-        isInitialized: state.isInitialized
-      }),
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...(persistedState as Partial<AuthState>),
-        // Always reset loading and error state on hydration
-        isLoading: false,
-        error: null,
-        // Don't persist session for security
-        session: null
+        // Only persist minimal user info if remember me is enabled
+        ...(state.rememberMe && state.user ? {
+          user: {
+            id: state.user.id,
+            email: state.user.email,
+            firstName: state.user.firstName,
+            lastName: state.user.lastName,
+            isEmailVerified: state.user.isEmailVerified
+          }
+        } : {})
       })
     }
   )
 )
-
-// Selectors for common use cases
-export const useAuth = () => {
-  const store = useAuthStore()
-  return {
-    user: store.user,
-    session: store.session,
-    isLoading: store.isLoading,
-    isInitialized: store.isInitialized,
-    error: store.error,
-    isAuthenticated: store.isAuthenticated(),
-    hasRole: store.hasRole,
-    signIn: store.signIn,
-    signUp: store.signUp,
-    signOut: store.signOut,
-    initialize: store.initialize,
-    setError: store.setError,
-    updateUserProfile: store.updateUserProfile
-  }
-}
-
-export const useAuthUser = () => useAuthStore((state) => state.user)
-export const useAuthSession = () => useAuthStore((state) => state.session)
-export const useAuthLoading = () => useAuthStore((state) => state.isLoading)
-export const useAuthError = () => useAuthStore((state) => state.error)
-export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenticated())
-
-// Initialize auth store on module load
-if (typeof window !== 'undefined') {
-  useAuthStore.getState().initialize()
-}
