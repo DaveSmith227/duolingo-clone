@@ -43,9 +43,15 @@ class Settings(BaseSettings):
     # Security settings
     secret_key: str = "dev-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
     password_reset_expire_hours: int = 1
+    
+    # Session management settings
+    session_expire_days: int = 30
+    remember_me_expire_days: int = 30
+    max_active_sessions: int = 5
+    session_activity_timeout_hours: int = 24 * 30  # 30 days of inactivity
     
     # CORS settings
     cors_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -58,8 +64,74 @@ class Settings(BaseSettings):
     redis_password: Optional[str] = None
     redis_db: int = 0
     
+    # Rate limiting settings
+    rate_limiting_enabled: bool = True
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_minutes: int = 15
+    login_lockout_duration_minutes: int = 30
+    password_reset_rate_limit_attempts: int = 3
+    password_reset_rate_limit_window_hours: int = 1
+    registration_rate_limit_attempts: int = 3
+    registration_rate_limit_window_hours: int = 1
+    
+    # Password security settings
+    password_min_length: int = 8
+    password_max_length: int = 128
+    password_require_uppercase: bool = True
+    password_require_lowercase: bool = True
+    password_require_digits: bool = True
+    password_require_special_chars: bool = True
+    password_prevent_common: bool = True
+    password_history_count: int = 5
+    password_expiry_days: Optional[int] = None  # None = no expiry
+    csrf_protection_enabled: bool = True
+    
+    # Email verification settings
+    require_email_verification: bool = False  # Set to True in production
+    
+    # Account lockout settings
+    lockout_max_failed_attempts: int = 5
+    lockout_duration_minutes: int = 30
+    lockout_progressive_enabled: bool = True
+    lockout_max_duration_hours: int = 24
+    rapid_fire_threshold_seconds: int = 5
+    rapid_fire_max_attempts: int = 3
+    multiple_ip_threshold: int = 3
+    multiple_ip_window_hours: int = 1
+    permanent_lockout_threshold: int = 10
+    
     # External API settings
     openai_api_key: Optional[str] = None
+    
+    # Supabase settings
+    supabase_url: Optional[str] = None
+    supabase_anon_key: Optional[str] = None
+    supabase_service_role_key: Optional[str] = None
+    supabase_jwt_secret: Optional[str] = None
+    
+    # OAuth provider settings
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    apple_client_id: Optional[str] = None
+    apple_team_id: Optional[str] = None
+    apple_key_id: Optional[str] = None
+    apple_private_key_path: Optional[str] = None
+    facebook_app_id: Optional[str] = None
+    facebook_app_secret: Optional[str] = None
+    tiktok_client_key: Optional[str] = None
+    tiktok_client_secret: Optional[str] = None
+    
+    # OAuth redirect settings
+    frontend_url: str = "http://localhost:3000"
+    oauth_redirect_url: Optional[str] = None
+    
+    # Email settings
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: bool = True
+    from_email: str = "noreply@duolingoclone.com"
     
     # Logging settings
     log_level: str = "INFO"
@@ -91,6 +163,14 @@ class Settings(BaseSettings):
         # This validation will be handled at the model level
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters long")
+        return v
+    
+    @field_validator("supabase_url")
+    @classmethod
+    def validate_supabase_url(cls, v):
+        """Validate Supabase URL format."""
+        if v and not v.startswith("https://"):
+            raise ValueError("SUPABASE_URL must start with https://")
         return v
     
     
@@ -141,6 +221,26 @@ class Settings(BaseSettings):
     def is_testing(self) -> bool:
         """Check if running in test environment."""
         return self.environment == "test"
+    
+    @property
+    def oauth_callback_url(self) -> str:
+        """
+        Build OAuth callback URL.
+        
+        Returns configured OAUTH_REDIRECT_URL if provided, otherwise builds from frontend URL.
+        """
+        if self.oauth_redirect_url:
+            return self.oauth_redirect_url
+        return f"{self.frontend_url}/auth/callback"
+    
+    @property
+    def has_supabase_config(self) -> bool:
+        """Check if Supabase configuration is complete."""
+        return all([
+            self.supabase_url,
+            self.supabase_anon_key,
+            self.supabase_service_role_key
+        ])
     
     model_config = SettingsConfigDict(
         env_file=".env",
