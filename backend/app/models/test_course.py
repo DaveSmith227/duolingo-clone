@@ -604,22 +604,28 @@ class TestLessonModel:
     
     def test_lesson_estimated_minutes_validation(self, db_session, sample_course):
         """Test estimated minutes validation."""
-        # Create section and unit first
+        # Create section first and commit to get ID
         section = Section(
             course_id=str(sample_course.id),
             name='Test Section',
             sort_order=1
         )
+        db_session.add(section)
+        db_session.commit()
+        db_session.refresh(section)
+        
+        # Create unit with section ID
         unit = Unit(
             section_id=str(section.id),
             name='Test Unit',
             sort_order=1
         )
-        db_session.add_all([section, unit])
+        db_session.add(unit)
         db_session.commit()
+        db_session.refresh(unit)
         
         # Valid minutes
-        valid_minutes = [1, 5, 60, 120]
+        valid_minutes = [0, 1, 5, 60, 120]
         for minutes in valid_minutes:
             lesson = Lesson(
                 unit_id=str(unit.id),
@@ -634,7 +640,7 @@ class TestLessonModel:
             db_session.commit()
         
         # Invalid minutes
-        invalid_minutes = [0, -1, 121, 'abc']
+        invalid_minutes = [-1, 121, 'abc']
         for minutes in invalid_minutes:
             with pytest.raises(ValueError, match="Estimated minutes"):
                 Lesson(
@@ -646,19 +652,25 @@ class TestLessonModel:
     
     def test_lesson_xp_reward_validation(self, db_session, sample_course):
         """Test XP reward validation."""
-        # Create section and unit first
+        # Create section first and commit to get ID
         section = Section(
             course_id=str(sample_course.id),
             name='Test Section',
             sort_order=1
         )
+        db_session.add(section)
+        db_session.commit()
+        db_session.refresh(section)
+        
+        # Create unit with section ID
         unit = Unit(
             section_id=str(section.id),
             name='Test Unit',
             sort_order=1
         )
-        db_session.add_all([section, unit])
+        db_session.add(unit)
         db_session.commit()
+        db_session.refresh(unit)
         
         # Valid XP rewards
         valid_xp = [0, 10, 50, 1000]
@@ -688,19 +700,25 @@ class TestLessonModel:
     
     def test_lesson_difficulty_score_property(self, db_session, sample_course):
         """Test difficulty score calculation."""
-        # Create section and unit first
+        # Create section first and commit to get ID
         section = Section(
             course_id=str(sample_course.id),
             name='Test Section',
             sort_order=1
         )
+        db_session.add(section)
+        db_session.commit()
+        db_session.refresh(section)
+        
+        # Create unit with section ID
         unit = Unit(
             section_id=str(section.id),
             name='Test Unit',
             sort_order=1
         )
-        db_session.add_all([section, unit])
+        db_session.add(unit)
         db_session.commit()
+        db_session.refresh(unit)
         
         lesson = Lesson(
             unit_id=str(unit.id),
@@ -722,17 +740,27 @@ class TestLessonPrerequisiteModel:
     
     def test_lesson_prerequisite_creation(self, db_session, sample_course):
         """Test creating lesson prerequisites."""
-        # Create section, unit, and lessons first
+        # Create section first and commit to get ID
         section = Section(
             course_id=str(sample_course.id),
             name='Test Section',
             sort_order=1
         )
+        db_session.add(section)
+        db_session.commit()
+        db_session.refresh(section)
+        
+        # Create unit with section ID
         unit = Unit(
             section_id=str(section.id),
             name='Test Unit',
             sort_order=1
         )
+        db_session.add(unit)
+        db_session.commit()
+        db_session.refresh(unit)
+        
+        # Create lessons with unit ID
         lesson1 = Lesson(
             unit_id=str(unit.id),
             name='Lesson 1',
@@ -743,8 +771,10 @@ class TestLessonPrerequisiteModel:
             name='Lesson 2',
             sort_order=2
         )
-        db_session.add_all([section, unit, lesson1, lesson2])
+        db_session.add_all([lesson1, lesson2])
         db_session.commit()
+        db_session.refresh(lesson1)
+        db_session.refresh(lesson2)
         
         # Create prerequisite
         prerequisite = LessonPrerequisite(
@@ -778,24 +808,35 @@ class TestLessonPrerequisiteModel:
     
     def test_lesson_prerequisite_self_reference_constraint(self, db_session, sample_course):
         """Test that lessons cannot be prerequisites of themselves."""
-        # Create section, unit, and lesson first
+        # Create section first and commit to get ID
         section = Section(
             course_id=str(sample_course.id),
             name='Test Section',
             sort_order=1
         )
+        db_session.add(section)
+        db_session.commit()
+        db_session.refresh(section)
+        
+        # Create unit with section ID
         unit = Unit(
             section_id=str(section.id),
             name='Test Unit',
             sort_order=1
         )
+        db_session.add(unit)
+        db_session.commit()
+        db_session.refresh(unit)
+        
+        # Create lesson with unit ID
         lesson = Lesson(
             unit_id=str(unit.id),
             name='Test Lesson',
             sort_order=1
         )
-        db_session.add_all([section, unit, lesson])
+        db_session.add(lesson)
         db_session.commit()
+        db_session.refresh(lesson)
         
         # Try to create self-prerequisite
         with pytest.raises(IntegrityError):
@@ -808,17 +849,27 @@ class TestLessonPrerequisiteModel:
     
     def test_lesson_prerequisite_relationships(self, db_session, sample_course):
         """Test prerequisite relationships."""
-        # Create section, unit, and lessons first
+        # Create section first and commit to get ID
         section = Section(
             course_id=str(sample_course.id),
             name='Test Section',
             sort_order=1
         )
+        db_session.add(section)
+        db_session.commit()
+        db_session.refresh(section)
+        
+        # Create unit with section ID
         unit = Unit(
             section_id=str(section.id),
             name='Test Unit',
             sort_order=1
         )
+        db_session.add(unit)
+        db_session.commit()
+        db_session.refresh(unit)
+        
+        # Create lessons with unit ID
         lesson1 = Lesson(
             unit_id=str(unit.id),
             name='Lesson 1',
@@ -829,8 +880,10 @@ class TestLessonPrerequisiteModel:
             name='Lesson 2',
             sort_order=2
         )
-        db_session.add_all([section, unit, lesson1, lesson2])
+        db_session.add_all([lesson1, lesson2])
         db_session.commit()
+        db_session.refresh(lesson1)
+        db_session.refresh(lesson2)
         
         # Create prerequisite
         prerequisite = LessonPrerequisite(
@@ -856,29 +909,38 @@ class TestCourseModelIntegration:
     
     def test_complete_course_hierarchy(self, db_session, sample_languages):
         """Test creating a complete course hierarchy."""
-        # Create course
+        # Create course first and commit to get ID
         course = Course(
             from_language_id=str(sample_languages['english'].id),
             to_language_id=str(sample_languages['spanish'].id),
             name='Spanish Course'
         )
+        db_session.add(course)
+        db_session.commit()
+        db_session.refresh(course)
         
-        # Create section
+        # Create section with course ID
         section = Section(
             course_id=str(course.id),
             name='Basic 1',
             sort_order=1
         )
+        db_session.add(section)
+        db_session.commit()
+        db_session.refresh(section)
         
-        # Create unit
+        # Create unit with section ID
         unit = Unit(
             section_id=str(section.id),
             name='Greetings',
             sort_order=1,
             color='#FF5722'
         )
+        db_session.add(unit)
+        db_session.commit()
+        db_session.refresh(unit)
         
-        # Create lessons
+        # Create lessons with unit ID
         lesson1 = Lesson(
             unit_id=str(unit.id),
             name='Introduction',
@@ -891,19 +953,18 @@ class TestCourseModelIntegration:
             sort_order=2,
             xp_reward=30
         )
+        db_session.add_all([lesson1, lesson2])
+        db_session.commit()
+        db_session.refresh(lesson1)
+        db_session.refresh(lesson2)
         
         # Create prerequisite
         prerequisite = LessonPrerequisite(
             lesson_id=str(lesson2.id),
             prerequisite_lesson_id=str(lesson1.id)
         )
-        
-        db_session.add_all([course, section, unit, lesson1, lesson2, prerequisite])
+        db_session.add(prerequisite)
         db_session.commit()
-        
-        # Refresh all objects to load relationships
-        for obj in [course, section, unit, lesson1, lesson2]:
-            db_session.refresh(obj)
         
         # Test the complete hierarchy
         assert len(course.sections) == 1
@@ -918,30 +979,45 @@ class TestCourseModelIntegration:
     
     def test_cascade_deletes(self, db_session, sample_languages):
         """Test that cascade deletes work properly."""
-        # Create complete hierarchy
+        # Create course first and commit to get ID
         course = Course(
             from_language_id=str(sample_languages['english'].id),
             to_language_id=str(sample_languages['spanish'].id),
             name='Test Course'
         )
+        db_session.add(course)
+        db_session.commit()
+        db_session.refresh(course)
+        
+        # Create section with course ID
         section = Section(
             course_id=str(course.id),
             name='Test Section',
             sort_order=1
         )
+        db_session.add(section)
+        db_session.commit()
+        db_session.refresh(section)
+        
+        # Create unit with section ID
         unit = Unit(
             section_id=str(section.id),
             name='Test Unit',
             sort_order=1
         )
+        db_session.add(unit)
+        db_session.commit()
+        db_session.refresh(unit)
+        
+        # Create lesson with unit ID
         lesson = Lesson(
             unit_id=str(unit.id),
             name='Test Lesson',
             sort_order=1
         )
-        
-        db_session.add_all([course, section, unit, lesson])
+        db_session.add(lesson)
         db_session.commit()
+        db_session.refresh(lesson)
         
         lesson_id = lesson.id
         unit_id = unit.id

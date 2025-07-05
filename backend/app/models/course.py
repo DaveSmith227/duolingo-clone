@@ -639,7 +639,7 @@ class Lesson(BaseModel):
     __table_args__ = (
         UniqueConstraint('unit_id', 'sort_order', name='uq_lesson_unit_order'),
         CheckConstraint(
-            "estimated_minutes > 0 AND estimated_minutes <= 120",
+            "estimated_minutes >= 0 AND estimated_minutes <= 120",
             name="valid_estimated_minutes"
         ),
         CheckConstraint(
@@ -702,8 +702,8 @@ class Lesson(BaseModel):
         except (ValueError, TypeError):
             raise ValueError("Estimated minutes must be a valid integer")
         
-        if estimated_minutes <= 0:
-            raise ValueError("Estimated minutes must be positive")
+        if estimated_minutes < 0:
+            raise ValueError("Estimated minutes must be non-negative")
         if estimated_minutes > 120:
             raise ValueError("Estimated minutes must be 120 or less")
         
