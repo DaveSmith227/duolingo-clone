@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     password_expiry_days: Optional[int] = None  # None = no expiry
     csrf_protection_enabled: bool = True
     
+    # Email verification settings
+    require_email_verification: bool = False  # Set to True in production
+    
     # Account lockout settings
     lockout_max_failed_attempts: int = 5
     lockout_duration_minutes: int = 30
