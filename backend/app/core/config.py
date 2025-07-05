@@ -43,9 +43,15 @@ class Settings(BaseSettings):
     # Security settings
     secret_key: str = "dev-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
     password_reset_expire_hours: int = 1
+    
+    # Session management settings
+    session_expire_days: int = 30
+    remember_me_expire_days: int = 30
+    max_active_sessions: int = 5
+    session_activity_timeout_hours: int = 24 * 30  # 30 days of inactivity
     
     # CORS settings
     cors_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
