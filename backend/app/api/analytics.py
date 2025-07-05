@@ -9,8 +9,9 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_db, get_current_user, require_admin_role
 from app.models.user import User
 from app.services.analytics_service import AnalyticsService
 from app.schemas.analytics import (
@@ -75,6 +76,21 @@ async def track_analytics_event(
         
         return AnalyticsEventResponse.from_orm(created_event)
         
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid event data: constraint violation"
+        )
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection error"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -120,6 +136,21 @@ async def track_analytics_events_batch(
         
         return [AnalyticsEventResponse.from_orm(event) for event in created_events]
         
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid batch event data: constraint violation"
+        )
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection error"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -167,6 +198,16 @@ async def get_user_progress(
         
         return progress
         
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection error"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -212,6 +253,21 @@ async def track_course_completion(
         
         return CourseCompletionResponse(**completion_result)
         
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid course completion data: constraint violation"
+        )
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection error"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -257,6 +313,21 @@ async def track_lesson_completion(
         
         return LessonCompletionResponse(**completion_result)
         
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid lesson completion data: constraint violation"
+        )
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection error"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -311,6 +382,16 @@ async def get_user_stats(
         
         return user_stats
         
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection error"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -393,6 +474,16 @@ async def get_analytics_events(
         
         return [AnalyticsEventResponse.from_orm(event) for event in events]
         
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection error"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -411,7 +502,7 @@ async def get_analytics_metrics(
     date_end: Optional[datetime] = Query(None, description="End date for metrics"),
     course_id: Optional[str] = Query(None, description="Filter by course ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    admin_user_payload: dict = Depends(require_admin_role)
 ) -> AnalyticsMetricsResponse:
     """
     Get aggregated analytics metrics.
@@ -424,42 +515,34 @@ async def get_analytics_metrics(
         date_end: End date for metrics
         course_id: Filter by course ID
         db: Database session
-        current_user: Authenticated user
+        admin_user_payload: Admin user payload (validated)
         
     Returns:
         Aggregated analytics metrics
         
     Raises:
-        HTTPException: If metrics retrieval fails or user is not authorized
+        HTTPException: If metrics retrieval fails
     """
-    # TODO: Add admin permission check
-    # if not current_user.is_admin:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="Admin access required"
-    #     )
-    
     try:
-        # TODO: Implement aggregated metrics calculation
-        # This would involve complex queries across multiple tables
-        # For now, return a placeholder response
-        
-        return AnalyticsMetricsResponse(
-            total_events=0,
-            events_by_type={},
-            events_by_category={},
-            active_users=0,
-            engagement_rate=0.0,
-            avg_session_duration=0.0,
-            completion_rates={},
-            top_courses=[],
-            date_range={
-                "start": date_start or datetime.utcnow(),
-                "end": date_end or datetime.utcnow()
-            },
-            last_updated=datetime.utcnow()
+        analytics_service = AnalyticsService(db)
+        metrics_data = analytics_service.get_aggregated_metrics(
+            date_start=date_start,
+            date_end=date_end,
+            course_id=course_id
         )
         
+        return AnalyticsMetricsResponse(**metrics_data)
+        
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection error"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -505,6 +588,16 @@ async def analytics_health_check(
             "version": "1.0.0"
         }
         
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection failed"
+        )
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database error occurred"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
