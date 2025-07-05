@@ -573,3 +573,105 @@ class ResendVerificationRequest(BaseModel):
         description="User email address",
         example="user@example.com"
     )
+
+
+class AccountDeletionRequest(BaseModel):
+    """Account deletion request schema."""
+    
+    confirmation: str = Field(
+        ...,
+        description="Confirmation phrase 'DELETE MY ACCOUNT'",
+        example="DELETE MY ACCOUNT"
+    )
+    
+    password: Optional[str] = Field(
+        None,
+        description="User password for verification (if not OAuth-only)",
+        min_length=8,
+        max_length=128
+    )
+    
+    reason: Optional[str] = Field(
+        None,
+        description="Reason for account deletion",
+        max_length=500
+    )
+
+
+class AccountDeletionResponse(BaseModel):
+    """Account deletion response schema."""
+    
+    message: str = Field(
+        ...,
+        description="Deletion confirmation message"
+    )
+    
+    user_id: str = Field(
+        ...,
+        description="ID of deleted user"
+    )
+    
+    email: str = Field(
+        ...,
+        description="Email of deleted user"
+    )
+    
+    deleted_at: datetime = Field(
+        ...,
+        description="Deletion timestamp"
+    )
+    
+    records_deleted: int = Field(
+        ...,
+        description="Total number of records deleted"
+    )
+    
+    supabase_auth_deleted: bool = Field(
+        ...,
+        description="Whether Supabase Auth account was deleted"
+    )
+
+
+class DataExportRequest(BaseModel):
+    """Data export request schema."""
+    
+    format: str = Field(
+        "json",
+        description="Export format (json only for now)",
+        example="json"
+    )
+    
+    include_sections: Optional[List[str]] = Field(
+        None,
+        description="Specific sections to include (all if not specified)",
+        example=["personal_data", "learning_data", "gamification_data"]
+    )
+
+
+class DataExportResponse(BaseModel):
+    """Data export response schema."""
+    
+    export_info: Dict[str, Any] = Field(
+        ...,
+        description="Export metadata"
+    )
+    
+    personal_data: Dict[str, Any] = Field(
+        ...,
+        description="User personal data"
+    )
+    
+    learning_data: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Learning progress data"
+    )
+    
+    gamification_data: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Gamification and achievement data"
+    )
+    
+    access_data: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Access control and role data"
+    )

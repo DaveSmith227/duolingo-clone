@@ -32,7 +32,11 @@ from app.schemas.auth import (
     RateLimitErrorResponse,
     AccountLockoutInfo,
     EmailVerificationRequest,
-    ResendVerificationRequest
+    ResendVerificationRequest,
+    AccountDeletionRequest,
+    AccountDeletionResponse,
+    DataExportRequest,
+    DataExportResponse
 )
 from app.core.config import get_settings
 from app.core.supabase import get_supabase_client
@@ -45,6 +49,7 @@ from app.services.rate_limiter import get_rate_limiter
 from app.services.audit_logger import get_audit_logger, AuditEventType, AuditSeverity
 from app.services.user_sync import get_user_sync_service
 from app.services.cookie_manager import get_cookie_manager
+from app.services.gdpr_service import get_gdpr_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -1684,3 +1689,177 @@ async def resend_verification(resend_data: ResendVerificationRequest, request: R
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Resend verification endpoint not yet implemented"
     )
+
+
+@router.post("/delete-account", response_model=AccountDeletionResponse, status_code=status.HTTP_200_OK)
+async def delete_account(
+    deletion_data: AccountDeletionRequest,
+    request: Request,
+    response: Response,
+    current_user_payload: dict = Depends(get_current_user_payload),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete user account and all associated data.
+    
+    This endpoint implements GDPR-compliant account deletion with complete
+    data cascade removal from all related tables and external services.
+    """
+    client_info = get_client_info(request)
+    gdpr_service = get_gdpr_service(db)
+    password_security = get_password_security()
+    cookie_manager = get_cookie_manager()
+    
+    # Validate confirmation phrase
+    if deletion_data.confirmation != "DELETE MY ACCOUNT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_confirmation",
+                "message": "Please type 'DELETE MY ACCOUNT' to confirm account deletion."
+            }
+        )
+    
+    user_id = current_user_payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "invalid_token",
+                "message": "Invalid token payload."
+            }
+        )
+    
+    try:
+        # Find user for password verification if needed
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "user_not_found",
+                    "message": "User not found."
+                }
+            )
+        
+        # Verify password if user has one (not OAuth-only)
+        if user.password_hash and deletion_data.password:
+            if not password_security.verify_password(deletion_data.password, user.password_hash):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "error": "invalid_password",
+                        "message": "Invalid password provided."
+                    }
+                )
+        elif user.password_hash and not deletion_data.password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "password_required",
+                    "message": "Password verification required for account deletion."
+                }
+            )
+        
+        # Perform account deletion
+        deletion_result = await gdpr_service.delete_user_account(
+            user_id=user_id,
+            ip_address=client_info["ip_address"],
+            user_agent=client_info["user_agent"],
+            reason=deletion_data.reason or "user_request"
+        )
+        
+        # Clear authentication cookies
+        cookie_manager.clear_auth_cookies(response)
+        
+        # Return deletion confirmation
+        return AccountDeletionResponse(
+            message="Your account has been successfully deleted. All your data has been permanently removed.",
+            user_id=deletion_result["user_id"],
+            email=deletion_result["email"],
+            deleted_at=datetime.now(timezone.utc),
+            records_deleted=deletion_result["total_records_deleted"],
+            supabase_auth_deleted=deletion_result.get("supabase_auth_deleted", False)
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    
+    except Exception as e:
+        logger.error(f"Account deletion error for user {user_id}: {str(e)}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "deletion_failed",
+                "message": "Account deletion failed. Please try again later."
+            }
+        )
+
+
+@router.post("/export-data", response_model=DataExportResponse, status_code=status.HTTP_200_OK)
+async def export_user_data(
+    export_data: DataExportRequest,
+    request: Request,
+    current_user_payload: dict = Depends(get_current_user_payload),
+    db: Session = Depends(get_db)
+):
+    """
+    Export all user data in JSON format.
+    
+    This endpoint implements GDPR-compliant data export functionality,
+    providing users with a complete export of all their personal data.
+    """
+    client_info = get_client_info(request)
+    gdpr_service = get_gdpr_service(db)
+    
+    user_id = current_user_payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "invalid_token",
+                "message": "Invalid token payload."
+            }
+        )
+    
+    # Validate export format
+    if export_data.format != "json":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_format",
+                "message": "Only JSON format is currently supported."
+            }
+        )
+    
+    try:
+        # Export user data
+        exported_data = await gdpr_service.export_user_data(
+            user_id=user_id,
+            ip_address=client_info["ip_address"],
+            user_agent=client_info["user_agent"]
+        )
+        
+        # Filter sections if specified
+        if export_data.include_sections:
+            filtered_data = {"export_info": exported_data["export_info"]}
+            for section in export_data.include_sections:
+                if section in exported_data:
+                    filtered_data[section] = exported_data[section]
+            exported_data = filtered_data
+        
+        logger.info(f"Successfully exported data for user {user_id}")
+        return DataExportResponse(**exported_data)
+        
+    except Exception as e:
+        logger.error(f"Data export error for user {user_id}: {str(e)}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "export_failed",
+                "message": "Data export failed. Please try again later."
+            }
+        )
