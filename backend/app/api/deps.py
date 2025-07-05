@@ -260,6 +260,21 @@ def require_premium_user(
     )
 
 
+def get_current_admin_user(
+    current_user_payload: dict = Depends(require_admin_role)
+) -> str:
+    """
+    Dependency to get current admin user ID.
+    
+    Args:
+        current_user_payload: Current user's token payload (already validated as admin)
+        
+    Returns:
+        Admin user ID
+    """
+    return current_user_payload.get("sub")
+
+
 def get_pagination_params(
     page: int = 1,
     page_size: int = 20,

@@ -250,6 +250,18 @@ def setup_routes(app: FastAPI) -> None:
     from app.api.auth import router as auth_router
     app.include_router(auth_router)
     
+    # Include privacy router
+    from app.api.privacy import router as privacy_router
+    app.include_router(privacy_router)
+    
+    # Include profile router
+    from app.api.profile import router as profile_router
+    app.include_router(profile_router)
+    
+    # Include admin router
+    from app.api.admin import router as admin_router
+    app.include_router(admin_router)
+    
     @app.get("/", tags=["Root"])
     async def root() -> Dict[str, Any]:
         """Root endpoint providing basic API information."""
