@@ -30,12 +30,16 @@ if config.config_file_name is not None:
 # Import all model modules here to ensure they're registered with Base.metadata
 # This is necessary for autogenerate to work properly
 try:
-    # Import all models here as they're created
-    # from app.models.user import User
-    # from app.models.course import Course
-    pass
-except ImportError:
+    # Import all models so they're registered with Base.metadata
+    from app.models.user import User, OAuthProvider
+    from app.models.course import Language, Course, Section, Unit, Lesson, LessonPrerequisite
+    from app.models.exercise import ExerciseType, Exercise, ExerciseOption, LessonExercise, AudioFile
+    from app.models.progress import UserCourse, UserLessonProgress, UserExerciseInteraction
+    from app.models.gamification import UserDailyXP, UserHeartsLog, Achievement, UserAchievement
+    from app.models.audit import UserActivityLog, SystemAuditLog
+except ImportError as e:
     # Models may not exist yet during initial setup
+    print(f"Warning: Could not import models: {e}")
     pass
 
 # Set target metadata for autogenerate support

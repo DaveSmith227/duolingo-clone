@@ -71,12 +71,17 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Debug mode: {settings.debug}")
     
-    # Test database connection
+    # Initialize database
     try:
+        from app.core.database import init_database
+        init_database()
+        logger.info("Database initialized successfully")
+        
+        # Test database connection
         db_info = get_database_info()
-        logger.info(f"Database connection successful: {db_info['database_name']}")
+        logger.info(f"Database connection successful: {db_info.get('status', 'unknown')}")
     except Exception as e:
-        logger.error(f"Database connection failed: {e}")
+        logger.error(f"Database initialization/connection failed: {e}")
         if settings.is_production:
             raise
     
@@ -237,6 +242,10 @@ def setup_exception_handlers(app: FastAPI) -> None:
 def setup_routes(app: FastAPI) -> None:
     """Configure application routes."""
     
+    # Include health check router
+    from app.api.health import router as health_router
+    app.include_router(health_router)
+    
     @app.get("/", tags=["Root"])
     async def root() -> Dict[str, Any]:
         """Root endpoint providing basic API information."""
@@ -248,47 +257,6 @@ def setup_routes(app: FastAPI) -> None:
             "docs_url": "/docs" if settings.debug else None,
             "status": "running"
         }
-    
-    @app.get("/health", tags=["Health"])
-    async def health_check() -> Dict[str, Any]:
-        """Comprehensive health check endpoint."""
-        settings = get_settings()
-        
-        # Check database connectivity
-        database_status = "healthy"
-        database_info = None
-        
-        try:
-            database_info = get_database_info()
-            database_status = "healthy"
-        except Exception as e:
-            logger.warning(f"Database health check failed: {e}")
-            database_status = "unhealthy"
-        
-        # Overall health status
-        overall_status = "healthy" if database_status == "healthy" else "degraded"
-        
-        health_data = {
-            "status": overall_status,
-            "timestamp": time.time(),
-            "version": settings.app_version,
-            "environment": settings.environment,
-            "checks": {
-                "database": {
-                    "status": database_status,
-                    "info": database_info
-                }
-            }
-        }
-        
-        # Return 503 if unhealthy
-        if overall_status != "healthy":
-            return JSONResponse(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                content=health_data
-            )
-        
-        return health_data
     
     @app.get("/info", tags=["Info"])
     async def app_info() -> Dict[str, Any]:
@@ -302,7 +270,7 @@ def setup_routes(app: FastAPI) -> None:
             "debug": settings.debug,
             "python_version": "3.11+",
             "framework": "FastAPI",
-            "database": "PostgreSQL",
+            "database": "PostgreSQL/SQLite",
             "features": [
                 "JWT Authentication",
                 "Password Hashing",

@@ -100,9 +100,14 @@ class Settings(BaseSettings):
         Build database connection string.
         
         Returns DATABASE_URL if provided, otherwise constructs from individual components.
+        For development environment, defaults to SQLite.
         """
         if self.database_url:
             return self.database_url
+        
+        # Use SQLite for development, PostgreSQL for production
+        if self.is_development or self.is_testing:
+            return "sqlite:///./app.db"
         
         return (
             f"postgresql://{self.db_user}:{self.db_password}"
