@@ -723,12 +723,6 @@ class TestAuthEndpointsNotImplemented:
         """Set up test dependencies."""
         self.client = TestClient(app)
     
-    def test_password_reset_not_implemented(self):
-        """Test that password reset endpoint returns 501."""
-        response = self.client.post("/auth/password-reset", json={
-            "email": "test@example.com"
-        })
-        assert response.status_code == 501
     
     def test_logout_not_implemented(self):
         """Test that logout endpoint returns 501."""
@@ -739,6 +733,127 @@ class TestAuthEndpointsNotImplemented:
         })
         # Could be 401 (no auth) or 501 (not implemented) depending on FastAPI's order
         assert response.status_code in [401, 501]
+
+
+class TestAuthPasswordReset:
+    """Test cases for password reset endpoints."""
+    
+    def setup_method(self):
+        """Set up test dependencies."""
+        self.client = TestClient(app)
+        self.valid_reset_request = {
+            "email": "test@example.com"
+        }
+        self.valid_confirm_request = {
+            "token": "valid_reset_token_123",
+            "new_password": "NewSecurePass123!"
+        }
+    
+    @patch('app.api.auth.get_password_reset_service')
+    def test_password_reset_request_success(self, mock_get_service):
+        """Test successful password reset request."""
+        # Mock service
+        mock_service = Mock()
+        mock_result = Mock()
+        mock_result.success = True
+        mock_result.message = "If the email address exists, a password reset link has been sent."
+        mock_service.request_password_reset.return_value = mock_result
+        mock_get_service.return_value = mock_service
+        
+        response = self.client.post("/auth/password-reset", json=self.valid_reset_request)
+        
+        assert response.status_code == 200
+        response_data = response.json()
+        assert "message" in response_data
+        assert "email" in response_data
+        assert response_data["email"] == "test@example.com"
+    
+    @patch('app.api.auth.get_password_reset_service')
+    def test_password_reset_request_rate_limited(self, mock_get_service):
+        """Test password reset request rate limiting."""
+        # Mock service with rate limit error
+        mock_service = Mock()
+        mock_result = Mock()
+        mock_result.success = False
+        mock_result.error_code = "rate_limit_exceeded"
+        mock_result.message = "Too many password reset requests"
+        mock_service.request_password_reset.return_value = mock_result
+        mock_get_service.return_value = mock_service
+        
+        response = self.client.post("/auth/password-reset", json=self.valid_reset_request)
+        
+        assert response.status_code == 429
+        response_data = response.json()
+        assert response_data["detail"]["error"] == "rate_limit_exceeded"
+    
+    def test_password_reset_request_invalid_email(self):
+        """Test password reset request with invalid email."""
+        invalid_data = {"email": "invalid-email"}
+        
+        response = self.client.post("/auth/password-reset", json=invalid_data)
+        assert response.status_code == 422
+    
+    @patch('app.api.auth.get_password_reset_service')
+    def test_password_reset_confirm_success(self, mock_get_service):
+        """Test successful password reset confirmation."""
+        # Mock service
+        mock_service = Mock()
+        mock_result = Mock()
+        mock_result.success = True
+        mock_result.message = "Password has been reset successfully."
+        mock_service.confirm_password_reset.return_value = mock_result
+        mock_get_service.return_value = mock_service
+        
+        response = self.client.post("/auth/password-reset/confirm", json=self.valid_confirm_request)
+        
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["message"] == "Password has been reset successfully."
+        assert response_data["success"] is True
+    
+    @patch('app.api.auth.get_password_reset_service')
+    def test_password_reset_confirm_invalid_token(self, mock_get_service):
+        """Test password reset confirmation with invalid token."""
+        # Mock service with invalid token error
+        mock_service = Mock()
+        mock_result = Mock()
+        mock_result.success = False
+        mock_result.error_code = "invalid_token"
+        mock_result.message = "Invalid or expired password reset token."
+        mock_service.confirm_password_reset.return_value = mock_result
+        mock_get_service.return_value = mock_service
+        
+        response = self.client.post("/auth/password-reset/confirm", json=self.valid_confirm_request)
+        
+        assert response.status_code == 400
+        response_data = response.json()
+        assert response_data["detail"]["error"] == "invalid_token"
+    
+    @patch('app.api.auth.get_password_reset_service')
+    def test_password_reset_confirm_password_validation_failed(self, mock_get_service):
+        """Test password reset confirmation with weak password."""
+        # Mock service with validation error
+        mock_service = Mock()
+        mock_result = Mock()
+        mock_result.success = False
+        mock_result.error_code = "password_validation_failed"
+        mock_result.message = "Password validation failed: too_short"
+        mock_service.confirm_password_reset.return_value = mock_result
+        mock_get_service.return_value = mock_service
+        
+        response = self.client.post("/auth/password-reset/confirm", json=self.valid_confirm_request)
+        
+        assert response.status_code == 422
+        response_data = response.json()
+        assert response_data["detail"]["error"] == "password_validation_failed"
+    
+    def test_password_reset_confirm_invalid_password(self):
+        """Test password reset confirmation with invalid password format."""
+        invalid_data = self.valid_confirm_request.copy()
+        invalid_data["new_password"] = "weak"
+        
+        response = self.client.post("/auth/password-reset/confirm", json=invalid_data)
+        assert response.status_code == 422
 
 
 class TestAuthSchemas:

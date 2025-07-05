@@ -38,6 +38,7 @@ class AuditEventType(Enum):
     # Password events
     PASSWORD_CHANGE = "password_change"
     PASSWORD_RESET_REQUEST = "password_reset_request"
+    PASSWORD_RESET_CONFIRM = "password_reset_confirm"
     PASSWORD_RESET_SUCCESS = "password_reset_success"
     PASSWORD_RESET_FAILURE = "password_reset_failure"
     

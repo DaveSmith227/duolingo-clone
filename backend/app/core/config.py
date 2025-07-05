@@ -125,6 +125,14 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     oauth_redirect_url: Optional[str] = None
     
+    # Email settings
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: bool = True
+    from_email: str = "noreply@duolingoclone.com"
+    
     # Logging settings
     log_level: str = "INFO"
     log_format: str = "json"  # json or text

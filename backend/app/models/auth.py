@@ -139,6 +139,13 @@ class SupabaseUser(BaseModel):
         doc="Password history for this user"
     )
     
+    password_reset_tokens = relationship(
+        "PasswordResetToken",
+        back_populates="supabase_user",
+        cascade="all, delete-orphan",
+        doc="Password reset tokens for this user"
+    )
+    
     @validates('sync_status')
     def validate_sync_status(self, key, status):
         """Validate sync status."""
@@ -562,3 +569,135 @@ class PasswordHistory(BaseModel):
     
     def __repr__(self) -> str:
         return f"<PasswordHistory(id={self.id}, user_id={self.supabase_user_id}, current={self.is_current})>"
+
+
+class PasswordResetToken(BaseModel):
+    """
+    Password reset token model.
+    
+    Stores secure tokens for password reset functionality with expiration
+    and single-use constraints for security.
+    """
+    
+    __tablename__ = "password_reset_tokens"
+    
+    id = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        doc="Primary key UUID"
+    )
+    
+    supabase_user_id = Column(
+        String(36),
+        ForeignKey("supabase_users.supabase_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="Supabase user ID"
+    )
+    
+    token_hash = Column(
+        String(255),
+        nullable=False,
+        unique=True,
+        index=True,
+        doc="Secure hash of the reset token"
+    )
+    
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        doc="Token creation timestamp"
+    )
+    
+    expires_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        doc="Token expiration timestamp"
+    )
+    
+    used_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        doc="Token usage timestamp"
+    )
+    
+    ip_address = Column(
+        String(45),  # IPv6 max length
+        nullable=True,
+        doc="IP address from token creation"
+    )
+    
+    user_agent = Column(
+        Text,
+        nullable=True,
+        doc="User agent from token creation"
+    )
+    
+    is_used = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="Whether token has been used"
+    )
+    
+    # Relationships
+    supabase_user = relationship(
+        "SupabaseUser",
+        back_populates="password_reset_tokens",
+        doc="Supabase user associated with this reset token"
+    )
+    
+    @validates('token_hash')
+    def validate_token_hash(self, key, token_hash):
+        """Validate token hash format."""
+        if not token_hash or len(token_hash) < 60:
+            raise ValueError("Token hash must be at least 60 characters long")
+        return token_hash
+    
+    @classmethod
+    def create_reset_token(
+        cls,
+        supabase_user_id: str,
+        token_hash: str,
+        expires_at: datetime,
+        ip_address: str = None,
+        user_agent: str = None
+    ) -> 'PasswordResetToken':
+        """
+        Create password reset token.
+        
+        Args:
+            supabase_user_id: User ID
+            token_hash: Secure hash of the reset token
+            expires_at: Token expiration time
+            ip_address: IP address from request
+            user_agent: User agent from request
+            
+        Returns:
+            PasswordResetToken instance
+        """
+        return cls(
+            supabase_user_id=supabase_user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+    
+    def is_expired(self) -> bool:
+        """Check if token is expired."""
+        return datetime.now(timezone.utc) > self.expires_at
+    
+    def is_valid(self) -> bool:
+        """Check if token is valid (not used and not expired)."""
+        return not self.is_used and not self.is_expired()
+    
+    def mark_as_used(self) -> None:
+        """Mark token as used."""
+        self.is_used = True
+        self.used_at = datetime.now(timezone.utc)
+    
+    def __repr__(self) -> str:
+        return f"<PasswordResetToken(id={self.id}, user_id={self.supabase_user_id}, used={self.is_used})>"

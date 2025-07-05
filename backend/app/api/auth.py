@@ -1172,22 +1172,191 @@ async def social_auth(
         )
 
 
-@router.post("/password-reset", response_model=Dict[str, str])
-async def request_password_reset(reset_data: PasswordResetRequest, request: Request, db: Session = Depends(get_db)):
-    """Password reset request endpoint - To be implemented in Task 4.4"""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Password reset endpoint not yet implemented"
-    )
+@router.post(
+    "/password-reset",
+    response_model=Dict[str, str],
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"model": ErrorResponse, "description": "Bad request"},
+        422: {"model": ValidationErrorResponse, "description": "Validation error"},
+        429: {"model": RateLimitErrorResponse, "description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="Request password reset",
+    description="Send password reset email with secure token to user's email address"
+)
+async def request_password_reset(
+    reset_data: PasswordResetRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Request password reset email.
+    
+    Sends a secure password reset token via email to the user's registered
+    email address. Includes rate limiting and security measures.
+    
+    Args:
+        reset_data: Password reset request data
+        request: FastAPI request object
+        db: Database session
+        
+    Returns:
+        Success message (generic to prevent email enumeration)
+        
+    Raises:
+        HTTPException: For various error conditions
+    """
+    from app.services.password_reset import get_password_reset_service
+    
+    client_info = get_client_info(request)
+    
+    try:
+        # Initialize password reset service
+        password_reset_service = get_password_reset_service(db)
+        
+        # Request password reset
+        result = await password_reset_service.request_password_reset(
+            email=reset_data.email,
+            ip_address=client_info["ip_address"],
+            user_agent=client_info["user_agent"]
+        )
+        
+        if not result.success:
+            if result.error_code == "rate_limit_exceeded":
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail={
+                        "error": "rate_limit_exceeded",
+                        "message": result.message,
+                        "retry_after": 3600  # 1 hour
+                    }
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={
+                        "error": "internal_error",
+                        "message": result.message
+                    }
+                )
+        
+        return {
+            "message": result.message,
+            "email": reset_data.email
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    
+    except Exception as e:
+        logger.error(f"Unexpected password reset request error: {str(e)}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "internal_error",
+                "message": "An unexpected error occurred. Please try again."
+            }
+        )
 
 
-@router.post("/password-reset/confirm", response_model=Dict[str, str])
-async def confirm_password_reset(confirm_data: PasswordResetConfirm, request: Request, db: Session = Depends(get_db)):
-    """Password reset confirmation endpoint - To be implemented in Task 4.4"""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Password reset confirmation endpoint not yet implemented"
-    )
+@router.post(
+    "/password-reset/confirm",
+    response_model=Dict[str, str],
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"model": ErrorResponse, "description": "Bad request - invalid or expired token"},
+        422: {"model": ValidationErrorResponse, "description": "Validation error"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="Confirm password reset",
+    description="Reset password using secure token received via email"
+)
+async def confirm_password_reset(
+    confirm_data: PasswordResetConfirm,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm password reset with token.
+    
+    Validates the password reset token and updates the user's password
+    with comprehensive security checks including password history validation.
+    
+    Args:
+        confirm_data: Password reset confirmation data
+        request: FastAPI request object
+        db: Database session
+        
+    Returns:
+        Success message confirming password reset
+        
+    Raises:
+        HTTPException: For various error conditions
+    """
+    from app.services.password_reset import get_password_reset_service
+    
+    client_info = get_client_info(request)
+    
+    try:
+        # Initialize password reset service
+        password_reset_service = get_password_reset_service(db)
+        
+        # Confirm password reset
+        result = await password_reset_service.confirm_password_reset(
+            reset_token=confirm_data.token,
+            new_password=confirm_data.new_password,
+            ip_address=client_info["ip_address"],
+            user_agent=client_info["user_agent"]
+        )
+        
+        if not result.success:
+            if result.error_code in ["invalid_token", "token_expired"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "error": result.error_code,
+                        "message": result.message
+                    }
+                )
+            elif result.error_code in ["password_validation_failed", "password_reused"]:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={
+                        "error": result.error_code,
+                        "message": result.message
+                    }
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={
+                        "error": "internal_error",
+                        "message": result.message
+                    }
+                )
+        
+        return {
+            "message": result.message,
+            "success": True
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    
+    except Exception as e:
+        logger.error(f"Unexpected password reset confirmation error: {str(e)}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "internal_error",
+                "message": "An unexpected error occurred. Please try again."
+            }
+        )
 
 
 @router.post("/refresh", response_model=TokenResponse)

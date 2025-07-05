@@ -566,6 +566,100 @@ class PasswordSecurity:
             return PasswordStrength.WEAK
         else:
             return PasswordStrength.VERY_WEAK
+    
+    async def check_password_history(
+        self,
+        supabase_user_id: str,
+        new_password: str
+    ) -> bool:
+        """
+        Check if password was recently used.
+        
+        Args:
+            supabase_user_id: User ID
+            new_password: New password to check
+            
+        Returns:
+            True if password was recently used, False otherwise
+        """
+        try:
+            from app.models.auth import PasswordHistory
+            from app.api.deps import get_db
+            
+            # Get database session
+            db = next(get_db())
+            
+            # Get recent password history
+            recent_passwords = db.query(PasswordHistory).filter(
+                PasswordHistory.supabase_user_id == supabase_user_id
+            ).order_by(PasswordHistory.created_at.desc()).limit(
+                self.policy.password_history_count
+            ).all()
+            
+            # Check against each recent password
+            for password_record in recent_passwords:
+                if self.verify_password(new_password, password_record.password_hash):
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking password history: {str(e)}")
+            return False
+    
+    async def update_user_password(
+        self,
+        supabase_user_id: str,
+        password_hash: str,
+        algorithm: str = 'argon2'
+    ) -> None:
+        """
+        Update user password and maintain password history.
+        
+        Args:
+            supabase_user_id: User ID
+            password_hash: New password hash
+            algorithm: Hashing algorithm used
+        """
+        try:
+            from app.models.auth import PasswordHistory
+            from app.api.deps import get_db
+            
+            # Get database session
+            db = next(get_db())
+            
+            # Mark all current passwords as not current
+            db.query(PasswordHistory).filter(
+                PasswordHistory.supabase_user_id == supabase_user_id,
+                PasswordHistory.is_current == True
+            ).update({"is_current": False})
+            
+            # Create new password history entry
+            new_password_record = PasswordHistory.create_password_entry(
+                supabase_user_id=supabase_user_id,
+                password_hash=password_hash,
+                algorithm=algorithm,
+                is_current=True
+            )
+            
+            db.add(new_password_record)
+            
+            # Clean up old password history (keep only last N passwords)
+            old_passwords = db.query(PasswordHistory).filter(
+                PasswordHistory.supabase_user_id == supabase_user_id
+            ).order_by(PasswordHistory.created_at.desc()).offset(
+                self.policy.password_history_count
+            ).all()
+            
+            for old_password in old_passwords:
+                db.delete(old_password)
+            
+            db.commit()
+            
+        except Exception as e:
+            logger.error(f"Error updating user password: {str(e)}")
+            db.rollback()
+            raise
 
 
 # Global password security instance
