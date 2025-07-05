@@ -2,19 +2,23 @@
 Health Check API
 
 FastAPI routes for health monitoring, database connectivity checks,
-and system status endpoints for the Duolingo clone application.
+Redis connectivity checks, and system status endpoints for the Duolingo clone application.
 """
 
 import time
+import uuid
 from datetime import datetime
 from typing import Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.core.config import get_settings
 from app.core.database import check_database_connection, get_database_info
 from app.api.deps import require_development_mode
+from app.core.response_formatter import response_formatter
+from app.services.redis_health_service import get_redis_health_service, RedisHealthStatus
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -48,12 +52,49 @@ class SystemHealthResponse(BaseModel):
     services: Dict[str, str]
 
 
+class RedisHealthResponse(BaseModel):
+    """Redis health check response model."""
+    status: str
+    timestamp: datetime
+    redis_status: str
+    is_connected: bool
+    response_time_ms: float
+    memory_usage: Dict[str, Any]
+    connection_info: Dict[str, Any]
+    performance_metrics: Dict[str, Any]
+
+
+class CacheHealthResponse(BaseModel):
+    """Cache health check response model."""
+    status: str
+    timestamp: datetime
+    cache_status: str
+    is_connected: bool
+    response_time_ms: float
+    performance_metrics: Dict[str, Any]
+    memory_info: Dict[str, Any]
+    connection_pool_info: Dict[str, Any]
+
+
+class DetailedHealthResponse(BaseModel):
+    """Detailed health check response model."""
+    status: str
+    timestamp: datetime
+    environment: str
+    version: str
+    uptime_seconds: float
+    database: Dict[str, Any]
+    redis: Dict[str, Any]
+    services: Dict[str, str]
+    system_metrics: Dict[str, Any]
+
+
 # Track application start time for uptime calculation
 _start_time = time.time()
 
 
-@router.get("/", response_model=HealthResponse)
-async def basic_health_check():
+@router.get("/")
+async def basic_health_check(request: Request) -> JSONResponse:
     """
     Basic health check endpoint.
     
@@ -61,17 +102,30 @@ async def basic_health_check():
     Useful for load balancers and basic monitoring.
     
     Returns:
-        HealthResponse: Basic health status
+        Standardized JSON response with basic health status
     """
+    # Extract request ID from headers if available
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    
     settings = get_settings()
     
-    return HealthResponse(
+    health_data = HealthResponse(
         status="healthy",
         timestamp=datetime.utcnow(),
         environment=settings.environment,
         version=settings.app_version,
         uptime_seconds=time.time() - _start_time
     )
+    
+    # Create standardized success response
+    standard_response = response_formatter.success(
+        data=health_data.model_dump(),
+        message="Application is healthy",
+        metadata={"operation": "health_check", "check_type": "basic"},
+        request_id=request_id
+    )
+    
+    return response_formatter.to_json_response(standard_response, status.HTTP_200_OK)
 
 
 @router.get("/database", response_model=DatabaseHealthResponse)
@@ -105,12 +159,70 @@ async def database_health_check():
     )
 
 
+@router.get("/cache", response_model=CacheHealthResponse)
+async def cache_health_check(request: Request) -> JSONResponse:
+    """
+    Redis cache health check endpoint.
+    
+    Returns detailed Redis performance metrics, connection status,
+    and cache performance information.
+    
+    Returns:
+        Standardized JSON response with Redis health status
+    """
+    # Extract request ID from headers if available
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    
+    redis_service = get_redis_health_service()
+    redis_health = redis_service.check_redis_health()
+    
+    # Determine overall cache status
+    if redis_health.status == RedisHealthStatus.HEALTHY:
+        cache_status = "healthy"
+        overall_status = "healthy"
+    elif redis_health.status == RedisHealthStatus.DEGRADED:
+        cache_status = "degraded"
+        overall_status = "degraded"
+    else:
+        cache_status = "unhealthy"
+        overall_status = "unhealthy"
+    
+    cache_data = CacheHealthResponse(
+        status=overall_status,
+        timestamp=datetime.utcnow(),
+        cache_status=cache_status,
+        is_connected=redis_health.is_connected,
+        response_time_ms=redis_health.response_time_ms,
+        performance_metrics=redis_health.performance_metrics or {},
+        memory_info=redis_health.memory_usage or {},
+        connection_pool_info=redis_health.connection_info or {}
+    )
+    
+    # Create standardized response
+    standard_response = response_formatter.success(
+        data=cache_data.model_dump(),
+        message=f"Redis cache is {cache_status}",
+        metadata={
+            "operation": "cache_health_check",
+            "check_type": "cache",
+            "redis_status": redis_health.status.value,
+            "error_message": redis_health.error_message
+        },
+        request_id=request_id
+    )
+    
+    # Use appropriate status code
+    status_code = status.HTTP_200_OK if redis_health.is_connected else status.HTTP_503_SERVICE_UNAVAILABLE
+    
+    return response_formatter.to_json_response(standard_response, status_code)
+
+
 @router.get("/system", response_model=SystemHealthResponse)
 async def system_health_check():
     """
     Comprehensive system health check.
     
-    Tests all system components including database, external services,
+    Tests all system components including database, Redis, external services,
     and returns detailed system status.
     
     Returns:
@@ -122,9 +234,16 @@ async def system_health_check():
     database_healthy = check_database_connection()
     database_info = get_database_info()
     
-    # Check external services (placeholder for future integrations)
+    # Check Redis
+    redis_service = get_redis_health_service()
+    redis_health = redis_service.check_redis_health()
+    redis_healthy = redis_health.is_connected and redis_health.status in [
+        RedisHealthStatus.HEALTHY, RedisHealthStatus.DEGRADED
+    ]
+    
+    # Check external services
     services_status = {
-        "redis": "not_configured",  # Placeholder
+        "redis": redis_health.status.value,
         "openai": "not_configured" if not settings.openai_api_key else "configured",
     }
     
@@ -132,6 +251,11 @@ async def system_health_check():
     overall_status = "healthy"
     if not database_healthy:
         overall_status = "degraded"
+    if not redis_healthy:
+        if overall_status == "healthy":
+            overall_status = "degraded"
+        else:
+            overall_status = "unhealthy"
     
     return SystemHealthResponse(
         status=overall_status,
@@ -148,13 +272,110 @@ async def system_health_check():
     )
 
 
+@router.get("/detailed", response_model=DetailedHealthResponse)
+async def detailed_health_check(request: Request) -> JSONResponse:
+    """
+    Detailed health check with all system components.
+    
+    Returns comprehensive health status including database, Redis,
+    performance metrics, and system information.
+    
+    Returns:
+        Standardized JSON response with detailed health status
+    """
+    # Extract request ID from headers if available
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    
+    settings = get_settings()
+    
+    # Check database
+    database_healthy = check_database_connection()
+    database_info = get_database_info()
+    
+    # Check Redis
+    redis_service = get_redis_health_service()
+    redis_health = redis_service.check_redis_health()
+    redis_healthy = redis_health.is_connected and redis_health.status in [
+        RedisHealthStatus.HEALTHY, RedisHealthStatus.DEGRADED
+    ]
+    
+    # Check external services
+    services_status = {
+        "redis": redis_health.status.value,
+        "openai": "not_configured" if not settings.openai_api_key else "configured",
+        "supabase": "configured" if settings.has_supabase_config else "not_configured"
+    }
+    
+    # System metrics
+    uptime = time.time() - _start_time
+    system_metrics = {
+        "uptime_seconds": uptime,
+        "uptime_human": f"{uptime:.0f}s",
+        "redis_response_time_ms": redis_health.response_time_ms,
+        "memory_info": redis_health.memory_usage or {},
+        "connection_pool_info": redis_health.connection_info or {},
+        "cache_performance": redis_health.performance_metrics or {}
+    }
+    
+    # Determine overall system status
+    overall_status = "healthy"
+    if not database_healthy:
+        overall_status = "degraded"
+    if not redis_healthy:
+        if overall_status == "healthy":
+            overall_status = "degraded"
+        else:
+            overall_status = "unhealthy"
+    
+    detailed_data = DetailedHealthResponse(
+        status=overall_status,
+        timestamp=datetime.utcnow(),
+        environment=settings.environment,
+        version=settings.app_version,
+        uptime_seconds=uptime,
+        database={
+            "healthy": database_healthy,
+            "status": database_info.get("status", "unknown"),
+            "info": database_info
+        },
+        redis={
+            "healthy": redis_healthy,
+            "status": redis_health.status.value,
+            "is_connected": redis_health.is_connected,
+            "response_time_ms": redis_health.response_time_ms,
+            "memory_usage": redis_health.memory_usage or {},
+            "connection_info": redis_health.connection_info or {},
+            "performance_metrics": redis_health.performance_metrics or {},
+            "error_message": redis_health.error_message,
+            "last_checked": redis_health.last_checked.isoformat() if redis_health.last_checked else None
+        },
+        services=services_status,
+        system_metrics=system_metrics
+    )
+    
+    # Create standardized response
+    standard_response = response_formatter.success(
+        data=detailed_data.model_dump(),
+        message=f"System status: {overall_status}",
+        metadata={
+            "operation": "detailed_health_check",
+            "check_type": "detailed",
+            "components_checked": ["database", "redis", "external_services"],
+            "overall_status": overall_status
+        },
+        request_id=request_id
+    )
+    
+    return response_formatter.to_json_response(standard_response, status.HTTP_200_OK)
+
+
 @router.get("/ready")
 async def readiness_check():
     """
     Readiness check for Kubernetes/Docker deployments.
     
     Returns 200 if application is ready to serve traffic,
-    503 if not ready (e.g., database not available).
+    503 if not ready (e.g., database or Redis not available).
     
     Returns:
         dict: Simple ready status
@@ -165,13 +386,25 @@ async def readiness_check():
     # Check critical dependencies
     database_healthy = check_database_connection()
     
+    # Check Redis (non-critical for basic functionality but important for rate limiting)
+    redis_service = get_redis_health_service()
+    redis_health = redis_service.check_redis_health()
+    redis_healthy = redis_health.is_connected
+    
     if not database_healthy:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Application not ready - database unavailable"
         )
     
-    return {"status": "ready"}
+    # Redis is considered degraded service, not critical for readiness
+    # but we include it in the response for monitoring
+    return {
+        "status": "ready",
+        "database": "healthy" if database_healthy else "unhealthy",
+        "redis": redis_health.status.value,
+        "overall": "ready"
+    }
 
 
 @router.get("/live")
@@ -193,7 +426,7 @@ async def metrics_endpoint():
     """
     Basic metrics endpoint.
     
-    Returns application metrics in a simple format.
+    Returns application metrics including Redis cache performance.
     In production, you might want to use Prometheus format.
     
     Returns:
@@ -202,6 +435,10 @@ async def metrics_endpoint():
     settings = get_settings()
     database_info = get_database_info()
     uptime = time.time() - _start_time
+    
+    # Get Redis metrics
+    redis_service = get_redis_health_service()
+    redis_health = redis_service.check_redis_health()
     
     return {
         "application_info": {
@@ -213,6 +450,14 @@ async def metrics_endpoint():
         "database_metrics": {
             "status": database_info.get("status", "unknown"),
             "pool_info": database_info.get("pool_info", {})
+        },
+        "redis_metrics": {
+            "status": redis_health.status.value,
+            "is_connected": redis_health.is_connected,
+            "response_time_ms": redis_health.response_time_ms,
+            "memory_usage": redis_health.memory_usage or {},
+            "performance_metrics": redis_health.performance_metrics or {},
+            "connection_info": redis_health.connection_info or {}
         },
         "system_metrics": {
             "timestamp": datetime.utcnow().isoformat(),
