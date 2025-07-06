@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from app.api.auth import get_current_user, get_current_admin_user
 from app.models.user import User
 from app.services.config_access_service import get_config_access_service
-from app.core.config_rbac import ConfigRole, ConfigPermission
+from app.core.config_rbac_compat import ConfigRole, ConfigPermission
 from app.core.config import get_settings
 
 

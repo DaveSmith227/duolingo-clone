@@ -24,7 +24,7 @@ from app.api.config_health import (
     check_database_health, check_redis_health, check_configuration_validity,
     check_security_configuration, check_external_services
 )
-from app.core.config_rbac import ConfigRole, get_config_rbac
+from app.core.config_rbac_compat import ConfigRole, get_config_rbac
 
 
 class TestHealthCheckEndpoints:

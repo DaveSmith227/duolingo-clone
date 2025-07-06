@@ -8,7 +8,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
-from .config_rbac import (
+from .config_rbac_compat import (
     ConfigRBAC, ConfigPermission, ConfigRole, FieldPermission,
     RoleDefinition, get_config_rbac, require_permission,
     with_field_filtering, RBACConfigProxy

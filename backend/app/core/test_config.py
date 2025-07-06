@@ -19,17 +19,58 @@ from app.core.config import (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_environment():
+    """Isolate environment variables for each test."""
+    # Clear environment variables that affect configuration
+    env_vars_to_clear = [
+        'ENVIRONMENT', 'NODE_ENV', 'APP_ENV', 'DEPLOY_ENV',
+        'DEBUG', 'SECRET_KEY', 'DATABASE_URL'
+    ]
+    
+    original_env = {}
+    for var in env_vars_to_clear:
+        if var in os.environ:
+            original_env[var] = os.environ[var]
+            del os.environ[var]
+    
+    yield
+    
+    # Restore original environment
+    for var, value in original_env.items():
+        os.environ[var] = value
+
+
+def get_valid_production_config():
+    """Get a valid production configuration for testing."""
+    return {
+        "ENVIRONMENT": "production",
+        "SECRET_KEY": "a" * 32,
+        "SUPABASE_URL": "https://test.supabase.co",
+        "SUPABASE_ANON_KEY": "test-anon-key",
+        "SUPABASE_SERVICE_ROLE_KEY": "test-service-key",
+        "DEBUG": "false",
+        "PASSWORD_MIN_LENGTH": "12",
+        "REQUIRE_EMAIL_VERIFICATION": "true",
+        "CSRF_PROTECTION_ENABLED": "true",
+        "CORS_ORIGINS": "https://myapp.com",
+        "DATABASE_URL": "postgresql://user:pass@localhost:5432/db"
+    }
+
+
 class TestSettings:
     """Test the Settings class configuration loading and validation."""
     
     def test_default_settings(self):
         """Test default settings are loaded correctly."""
-        settings = Settings(_env_file=None)
-        assert settings.app_name == "Duolingo Clone API"
-        assert settings.app_version == "0.1.0"
-        assert settings.environment == "development"
-        assert settings.debug is False
-        assert settings.secret_key == "dev-secret-key-change-in-production"
+        # Explicitly set development environment
+        with patch.dict(os.environ, {"ENVIRONMENT": "development"}):
+            settings = Settings(_env_file=None)
+            assert settings.app_name == "Duolingo Clone API"
+            assert settings.app_version == "0.1.0"
+            assert settings.environment == "development"
+            assert settings.debug is False
+            assert settings.secret_key == "dev-secret-key-change-in-production"
     
     def test_environment_validation(self):
         """Test environment validation."""
@@ -130,8 +171,7 @@ class TestEnvironmentSpecificValidation:
         # Missing Supabase config
         with patch.dict(os.environ, {
             "ENVIRONMENT": "production",
-            "SECRET_KEY": "a" * 32,
-            "SUPABASE_URL": ""
+            "SECRET_KEY": "a" * 32
         }):
             with pytest.raises(ValidationError) as exc_info:
                 Settings(_env_file=None)
@@ -162,25 +202,17 @@ class TestEnvironmentSpecificValidation:
             assert "Password minimum length must be at least 10" in str(exc_info.value)
         
         # Email verification disabled
-        with patch.dict(os.environ, {
-            "ENVIRONMENT": "production",
-            "SECRET_KEY": "a" * 32,
-            "SUPABASE_URL": "https://test.supabase.co",
-            "SUPABASE_ANON_KEY": "test-key",
-            "REQUIRE_EMAIL_VERIFICATION": "false"
-        }):
+        config = get_valid_production_config()
+        config["REQUIRE_EMAIL_VERIFICATION"] = "false"
+        with patch.dict(os.environ, config):
             with pytest.raises(ValidationError) as exc_info:
                 Settings(_env_file=None)
             assert "Email verification must be enabled" in str(exc_info.value)
         
         # CSRF disabled
-        with patch.dict(os.environ, {
-            "ENVIRONMENT": "production",
-            "SECRET_KEY": "a" * 32,
-            "SUPABASE_URL": "https://test.supabase.co",
-            "SUPABASE_ANON_KEY": "test-key",
-            "CSRF_PROTECTION_ENABLED": "false"
-        }):
+        config = get_valid_production_config()
+        config["CSRF_PROTECTION_ENABLED"] = "false"
+        with patch.dict(os.environ, config):
             with pytest.raises(ValidationError) as exc_info:
                 Settings(_env_file=None)
             assert "CSRF protection must be enabled" in str(exc_info.value)
@@ -239,17 +271,19 @@ class TestDatabaseConfiguration:
     
     def test_database_dsn_production(self):
         """Test database DSN construction for production."""
-        with patch.dict(os.environ, {
-            "ENVIRONMENT": "production",
-            "SECRET_KEY": "a" * 32,
-            "SUPABASE_URL": "https://test.supabase.co",
-            "SUPABASE_ANON_KEY": "test-key",
+        config = get_valid_production_config()
+        config.update({
             "DB_HOST": "prod-db",
             "DB_PORT": "5432",
-            "DB_NAME": "prod_db",
+            "DB_NAME": "prod_db", 
             "DB_USER": "prod_user",
             "DB_PASSWORD": "prod_pass"
-        }):
+        })
+        # Remove DATABASE_URL to test construction
+        if "DATABASE_URL" in config:
+            del config["DATABASE_URL"]
+            
+        with patch.dict(os.environ, config):
             settings = Settings(_env_file=None)
             expected = "postgresql://prod_user:prod_pass@prod-db:5432/prod_db"
             assert settings.database_dsn == expected
@@ -257,13 +291,13 @@ class TestDatabaseConfiguration:
     def test_production_missing_db_config(self):
         """Test production validation with missing database config."""
         # Should raise validation error
-        with patch.dict(os.environ, {
-            "ENVIRONMENT": "production",
-            "SECRET_KEY": "a" * 32,
-            "SUPABASE_URL": "https://test.supabase.co",
-            "SUPABASE_ANON_KEY": "test-key",
-            "DB_PASSWORD": ""  # Missing password
-        }):
+        config = get_valid_production_config()
+        # Remove DATABASE_URL and DB_PASSWORD to trigger validation error
+        if "DATABASE_URL" in config:
+            del config["DATABASE_URL"]
+        config["DB_PASSWORD"] = ""
+        
+        with patch.dict(os.environ, config):
             with pytest.raises(ValidationError) as exc_info:
                 Settings(_env_file=None)
             assert "Missing database configuration" in str(exc_info.value)
@@ -311,12 +345,8 @@ class TestConfigurationHelpers:
             assert dev_settings.is_production is False
             assert dev_settings.is_testing is False
         
-        with patch.dict(os.environ, {
-            "ENVIRONMENT": "production",
-            "SECRET_KEY": "a" * 32,
-            "SUPABASE_URL": "https://test.supabase.co",
-            "SUPABASE_ANON_KEY": "test-key"
-        }):
+        config = get_valid_production_config()
+        with patch.dict(os.environ, config):
             prod_settings = Settings(_env_file=None)
             assert prod_settings.is_development is False
             assert prod_settings.is_production is True
@@ -427,12 +457,12 @@ class TestConfigurationLoading:
         settings2 = get_settings()
         assert settings1 is settings2
     
-    @patch.dict(os.environ, {"APP_NAME": "Original"})
     def test_reload_settings(self):
         """Test reload_settings updates configuration."""
-        # Initial settings
-        original_settings = get_settings()
-        assert original_settings.app_name == "Original"
+        # Set initial environment
+        with patch.dict(os.environ, {"APP_NAME": "Original"}):
+            original_settings = get_settings()
+            assert original_settings.app_name == "Original"
         
         # Change environment and reload
         with patch.dict(os.environ, {"APP_NAME": "Updated"}):
