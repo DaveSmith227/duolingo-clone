@@ -5,12 +5,19 @@ import { resolve } from 'path'
 import { loadEnv } from 'vite'
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  // Only load necessary env vars to prevent memory issues
+  const env = loadEnv(mode, process.cwd(), 'NEXT_PUBLIC_')
+  const filteredEnv = {
+    NODE_ENV: 'test',
+    ...Object.fromEntries(
+      Object.entries(env).filter(([key]) => key.startsWith('NEXT_PUBLIC_'))
+    )
+  }
   
   return {
-  plugins: [react()],
+  // Remove react plugin for node tests
   define: {
-    'process.env': env
+    'process.env': filteredEnv
   },
   test: {
     globals: true,
@@ -24,7 +31,7 @@ export default defineConfig(({ mode }) => {
       ['src/stores/**/*.test.ts', 'node'],
       ['src/utils/**/*.test.ts', 'node']
     ],
-    setupFiles: ['./src/test/setup.ts'],
+    setupFiles: ['./src/test/setup.node.ts'],
     pool: 'threads',
     poolOptions: {
       threads: {
