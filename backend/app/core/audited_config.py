@@ -48,7 +48,11 @@ class AuditedSettings:
         
         # Special handling for methods
         if name in ['dict', 'json', 'export_safe', 'get_environment_info', 
-                   'reload', '__class__', '__dict__']:
+                   'reload', '__class__', '__dict__', 'export_audit_safe',
+                   'get_access_stats', 'get_modification_history']:
+            # Return our own methods if they exist
+            if hasattr(self, name):
+                return object.__getattribute__(self, name)
             return getattr(object.__getattribute__(self, '_settings'), name)
         
         try:

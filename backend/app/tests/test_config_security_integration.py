@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings, Settings
-from app.core.config_rbac import ConfigRole, get_config_rbac
+from app.core.config_rbac_compat import ConfigRole, get_config_rbac
 from app.core.audit_logger import configure_audit_logger, get_audit_logger
 from app.api.config import router as config_router
 from app.api.audit import router as audit_router

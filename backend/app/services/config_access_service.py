@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, List, Set
 from datetime import datetime, timezone
 
 from app.core.config import get_settings, Settings
-from app.core.config_rbac import (
+from app.core.config_rbac_compat import (
     get_config_rbac, ConfigPermission, ConfigRole,
     RBACConfigProxy, FieldPermission, RoleDefinition
 )

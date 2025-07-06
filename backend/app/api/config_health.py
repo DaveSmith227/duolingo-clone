@@ -27,7 +27,7 @@ from sqlalchemy import text
 
 from ..core.config import Settings, get_settings
 from ..core.database import get_db
-from ..core.config_rbac import ConfigRole, get_config_rbac, require_permission, ConfigPermission
+from ..core.config_rbac_compat import ConfigRole, get_config_rbac, require_permission, ConfigPermission
 from ..services.config_access_service import get_config_access_service
 from ..core.audit_logger import get_audit_logger
 

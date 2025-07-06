@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch, MagicMock, call
 from typing import Dict, Any, List
 
 from .config import Settings, get_settings
-from .config_rbac import (
+from .config_rbac_compat import (
     ConfigRBAC, ConfigPermission, ConfigRole, RBACConfigProxy,
     get_config_rbac, FieldPermission, RoleDefinition
 )
