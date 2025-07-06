@@ -5,12 +5,19 @@ import { resolve } from 'path'
 import { loadEnv } from 'vite'
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  // Only load NEXT_PUBLIC_ and NODE_ENV variables to avoid memory issues
+  const env = loadEnv(mode, process.cwd(), 'NEXT_PUBLIC_')
+  const filteredEnv = {
+    NODE_ENV: process.env.NODE_ENV || 'test',
+    ...Object.fromEntries(
+      Object.entries(env).filter(([key]) => key.startsWith('NEXT_PUBLIC_'))
+    )
+  }
   
   return {
   plugins: [react()],
   define: {
-    'process.env': env
+    'process.env': filteredEnv
   },
   css: {
     postcss: false
@@ -26,9 +33,13 @@ export default defineConfig(({ mode }) => {
     pool: 'forks',
     poolOptions: {
       forks: {
-        singleFork: true
+        singleFork: true,
+        maxForks: 1,
+        isolate: true
       }
     },
+    maxWorkers: 1,
+    minWorkers: 1,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

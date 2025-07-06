@@ -13,7 +13,10 @@
     "test:coverage": "vitest run --coverage",
     "test:node": "vitest -c vitest.config.node.ts",
     "test:unit": "vitest run src/lib src/stores -c vitest.config.node.ts",
-    "test:components": "vitest run src/components src/hooks"
+    "test:components": "vitest run src/components src/hooks",
+    "test:performance": "vitest run src/__tests__/config-performance.test.ts --reporter=verbose",
+    "test:perf": "npm run test:performance",
+    "test:all": "npm run test:unit && npm run test:components && npm run test:performance"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.5",
@@ -27,6 +30,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.3.1",
+    "zod": "^3.25.74",
     "zustand": "^5.0.6"
   },
   "devDependencies": {

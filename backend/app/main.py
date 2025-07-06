@@ -71,6 +71,23 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Debug mode: {settings.debug}")
     
+    # Validate configuration for environment
+    from app.core.config import validate_config_for_environment
+    config_issues = validate_config_for_environment(settings.environment)
+    if config_issues:
+        logger.warning("Configuration validation warnings:")
+        for issue in config_issues:
+            logger.warning(f"  - {issue}")
+        
+        # In production, fail fast on configuration issues
+        if settings.is_production and any("is using default" in issue for issue in config_issues):
+            raise ValueError(f"Critical configuration issues in production: {config_issues}")
+    else:
+        logger.info("Configuration validation passed")
+    
+    # Log environment info
+    logger.info(f"Environment info: {settings.get_environment_info()}")
+    
     # Initialize database
     try:
         from app.core.database import init_database
@@ -84,6 +101,25 @@ async def lifespan(app: FastAPI):
         logger.error(f"Database initialization/connection failed: {e}")
         if settings.is_production:
             raise
+    
+    # Initialize Redis if configured
+    if settings.redis_host or settings.redis_url:
+        try:
+            from app.services.redis_health_service import RedisHealthService
+            redis_health = RedisHealthService()
+            is_healthy = await redis_health.check_health()
+            if is_healthy:
+                logger.info("Redis connection successful")
+            else:
+                logger.warning("Redis connection failed - caching and rate limiting may be affected")
+                if settings.is_production:
+                    raise RuntimeError("Redis connection required in production")
+        except ImportError:
+            logger.warning("Redis health service not available")
+        except Exception as e:
+            logger.error(f"Redis initialization failed: {e}")
+            if settings.is_production:
+                raise
     
     yield
     
@@ -134,6 +170,10 @@ def setup_middleware(app: FastAPI, settings) -> None:
             TrustedHostMiddleware,
             allowed_hosts=["*"]  # Configure with actual allowed hosts in production
         )
+    
+    # Audit middleware (should be added early to capture all requests)
+    from app.middleware.audit_middleware import setup_audit_middleware
+    setup_audit_middleware(app)
     
     # Rate limiting middleware (should be added early in the middleware stack)
     from app.middleware.rate_limiting import RateLimitMiddleware
@@ -288,6 +328,27 @@ def setup_routes(app: FastAPI) -> None:
     from app.api.users import router as users_router
     app.include_router(users_router)
     
+    # Include audit router (admin only)
+    try:
+        from app.api.audit import router as audit_router
+        app.include_router(audit_router)
+    except ImportError:
+        logger.warning("Audit router not available")
+    
+    # Include configuration router
+    try:
+        from app.api.config import router as config_router
+        app.include_router(config_router)
+    except ImportError:
+        logger.warning("Configuration router not available")
+    
+    # Include configuration health router
+    try:
+        from app.api.config_health import router as config_health_router
+        app.include_router(config_health_router)
+    except ImportError:
+        logger.warning("Configuration health router not available")
+    
     @app.get("/", tags=["Root"])
     async def root() -> Dict[str, Any]:
         """Root endpoint providing basic API information."""
@@ -322,6 +383,35 @@ def setup_routes(app: FastAPI) -> None:
                 "CORS Support",
                 "Request Logging"
             ]
+        }
+    
+    @app.get("/config/health", tags=["Config"])
+    async def config_health() -> Dict[str, Any]:
+        """Configuration health check endpoint."""
+        settings = get_settings()
+        
+        # Only available in non-production environments
+        if settings.is_production:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Not found"
+            )
+        
+        # Get validation issues
+        from app.core.config import validate_config_for_environment
+        from app.core.audited_config import create_audited_settings
+        
+        issues = validate_config_for_environment(settings.environment)
+        
+        # Use audited settings for export
+        audited = create_audited_settings(settings)
+        
+        return {
+            "status": "healthy" if not issues else "warning",
+            "environment": settings.environment,
+            "configuration": audited.export_audit_safe(),
+            "validation_issues": issues,
+            "environment_info": settings.get_environment_info()
         }
 
 
