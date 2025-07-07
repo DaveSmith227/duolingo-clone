@@ -82,6 +82,13 @@ npm run test:coverage # Run tests with coverage
 npm run test:unit    # Run unit tests only
 npm run test:components # Run component tests
 npm run test:performance # Run performance tests
+
+# Design System Commands
+npm run design:extract <screenshot>    # Extract tokens from screenshot
+npm run design:validate <url>          # Validate URL against reference
+npm run design:cache --stats           # Show cache statistics
+npm run design:init                    # Initialize design system
+npm run design:help                    # Show all available commands
 ```
 
 ### Backend
@@ -226,6 +233,13 @@ pytest --coverage    # Run with coverage
 │   ├── stores/      # Zustand state management
 │   ├── hooks/       # Custom React hooks
 │   ├── lib/         # Utility functions and configurations
+│   │   └── design-system/ # Comprehensive design system
+│   │       ├── cli/       # Command-line tools
+│   │       ├── extractor/ # Token extraction engine
+│   │       ├── validator/ # Visual validation system
+│   │       ├── tokens/    # Token management
+│   │       ├── config/    # Configuration generators
+│   │       └── docs/      # Design system documentation
 │   └── __tests__/   # Test files
 ├── public/          # Static assets
 └── package.json     # Dependencies and scripts

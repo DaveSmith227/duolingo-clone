@@ -41,6 +41,7 @@ class BaseConfigModel(BaseSettings):
     
     # External API settings
     openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
     
     # Supabase settings
     supabase_url: Optional[str] = None

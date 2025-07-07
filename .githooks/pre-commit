@@ -71,4 +71,88 @@ fi
 # Additional checks can be added here
 # For example: linting, formatting, tests, etc.
 
+# Design System Validation
+echo -e "${YELLOW}🎨 Checking for design system changes...${NC}"
+
+# Check if any design-related files have been modified
+DESIGN_FILES=$(echo "$STAGED_FILES" | grep -E "\.(tsx?|css|scss|less|png|jpg|jpeg|gif|svg)$|design-system|tokens|validation")
+
+if [ -n "$DESIGN_FILES" ]; then
+    echo -e "${YELLOW}Design-related files detected, running validation...${NC}"
+    
+    # Check if validation config exists
+    VALIDATION_CONFIG="$GIT_ROOT/frontend/validation.config.json"
+    if [ -f "$VALIDATION_CONFIG" ]; then
+        echo -e "${YELLOW}Running design system validation...${NC}"
+        
+        # Change to frontend directory for design validation
+        cd "$GIT_ROOT/frontend"
+        
+        # Run design validation if we have validation config
+        if command -v npm &> /dev/null; then
+            # Check if tsx is available
+            if npm list tsx &> /dev/null; then
+                # Run validation with limited scope to avoid performance issues
+                VALIDATION_OUTPUT=$(npm run design:validate:batch "$VALIDATION_CONFIG" -- --dry-run --fail-fast --concurrent 1 2>&1)
+                VALIDATION_EXIT_CODE=$?
+                
+                if [ $VALIDATION_EXIT_CODE -ne 0 ]; then
+                    echo -e "${RED}❌ Design validation failed!${NC}"
+                    echo -e "${RED}$VALIDATION_OUTPUT${NC}"
+                    echo
+                    echo -e "${YELLOW}To bypass this check (NOT RECOMMENDED), use:${NC}"
+                    echo -e "  git commit --no-verify"
+                    echo
+                    echo -e "${GREEN}To fix design validation issues:${NC}"
+                    echo -e "  1. Review the validation report"
+                    echo -e "  2. Update screenshots or fix implementation"
+                    echo -e "  3. Run: npm run design:validate:batch $VALIDATION_CONFIG"
+                    echo -e "  4. Stage your changes and try again"
+                    exit 1
+                else
+                    echo -e "${GREEN}✅ Design validation passed${NC}"
+                fi
+            else
+                echo -e "${YELLOW}⚠️  tsx not installed, skipping design validation${NC}"
+                echo -e "   Run 'npm install' to enable design validation"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  npm not found, skipping design validation${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  No validation config found at $VALIDATION_CONFIG${NC}"
+        echo -e "   Run 'npm run design:init' to create validation configuration"
+    fi
+    
+    # Check for token consistency
+    TOKEN_FILES=$(echo "$STAGED_FILES" | grep -E "tokens.*\.(ts|js|css)$")
+    if [ -n "$TOKEN_FILES" ]; then
+        echo -e "${YELLOW}Design token files detected, checking consistency...${NC}"
+        
+        # Simple check for token file consistency
+        for file in $TOKEN_FILES; do
+            if [ -f "$GIT_ROOT/frontend/$file" ]; then
+                # Check if the file contains valid TypeScript/JavaScript syntax
+                if echo "$file" | grep -E "\.(ts|js)$" > /dev/null; then
+                    # Basic syntax check for TS/JS files
+                    if command -v node &> /dev/null; then
+                        node -c "$GIT_ROOT/frontend/$file" 2>/dev/null
+                        if [ $? -ne 0 ]; then
+                            echo -e "${RED}❌ Syntax error in token file: $file${NC}"
+                            exit 1
+                        fi
+                    fi
+                fi
+            fi
+        done
+        
+        echo -e "${GREEN}✅ Token files syntax check passed${NC}"
+    fi
+    
+    # Go back to git root
+    cd "$GIT_ROOT"
+else
+    echo -e "${GREEN}✅ No design-related files changed${NC}"
+fi
+
 exit 0
