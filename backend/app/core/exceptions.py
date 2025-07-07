@@ -61,3 +61,8 @@ class PermissionDeniedError(AuthorizationError):
 class ServiceUnavailableError(AppException):
     """Raised when external service is unavailable."""
     pass
+
+
+class ServiceError(AppException):
+    """Raised when a service operation fails."""
+    pass

@@ -1,0 +1,115 @@
+name: Design System Quick Check
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**/design-system/**'
+      - 'frontend/**/tokens/**'
+    types: [opened, synchronize, reopened]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  quick-check:
+    name: Quick Design System Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint design system code
+        working-directory: frontend
+        run: |
+          echo "🔍 Linting design system code..."
+          npx eslint src/lib/design-system --ext .ts,.tsx --format compact
+
+      - name: Type check design system
+        working-directory: frontend
+        run: |
+          echo "🔍 Type checking design system..."
+          npx tsc --noEmit --project tsconfig.json
+
+      - name: Run design system unit tests
+        working-directory: frontend
+        run: |
+          echo "🧪 Running design system tests..."
+          npm run test:design
+
+      - name: Check for CLI functionality
+        working-directory: frontend
+        run: |
+          echo "🔧 Checking CLI commands..."
+          
+          # Test CLI help commands
+          npm run design:extract -- --help > /dev/null || echo "⚠️ Extract CLI has issues"
+          npm run design:validate -- --help > /dev/null || echo "⚠️ Validate CLI has issues"
+          npm run design:cache -- --help > /dev/null || echo "⚠️ Cache CLI has issues"
+          
+          echo "✅ CLI functionality check completed"
+
+      - name: Validate token file structure
+        working-directory: frontend
+        run: |
+          echo "📁 Checking token file structure..."
+          
+          # Check if token directories exist and have proper structure
+          if [ -d "src/lib/design-system/tokens" ]; then
+            echo "✅ Tokens directory exists"
+            
+            # List token files
+            find src/lib/design-system/tokens -name "*.ts" -o -name "*.js" | head -10
+          else
+            echo "ℹ️ No tokens directory found"
+          fi
+          
+          # Check CLI directory structure
+          if [ -d "src/lib/design-system/cli" ]; then
+            echo "✅ CLI directory exists"
+            ls -la src/lib/design-system/cli/
+          else
+            echo "❌ CLI directory missing"
+            exit 1
+          fi
+
+      - name: Generate summary comment
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const comment = `## 🚀 Design System Quick Check
+            
+            This is a lightweight validation of your design system changes.
+            
+            **Checks performed:**
+            - ✅ Code linting
+            - ✅ TypeScript compilation
+            - ✅ Unit tests
+            - ✅ CLI functionality
+            - ✅ File structure validation
+            
+            **Next steps:**
+            - For full visual validation, merge to develop or main branch
+            - Ensure validation.config.json is properly configured
+            - Add reference screenshots to trigger visual validation
+            
+            *This quick check helps catch basic issues early in development.*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

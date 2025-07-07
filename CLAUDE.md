@@ -26,6 +26,15 @@ This is a Duolingo clone built as a full-stack application with Next.js frontend
 - **Audit Log Viewer**: Searchable audit trail with filtering
 - **Data Export**: GDPR-compliant data export functionality
 
+### Configuration Service Architecture
+- **Service-Oriented Design**: Modular configuration system with specialized services
+- **ConfigServiceOrchestrator**: Central orchestrator managing all configuration services
+- **DatabaseConfigService**: Database-specific configuration handling
+- **SecurityConfigService**: Security settings and validation
+- **ConfigValidationService**: Cross-service validation orchestration
+- **Environment-Specific Validation**: Different rules for dev/staging/production
+- **Migration Support**: Configuration migration tools with version tracking
+
 ### Frontend (Next.js 15)
 - **Location**: `/frontend/`
 - **Framework**: Next.js 15.3.5 with App Router
@@ -42,7 +51,8 @@ This is a Duolingo clone built as a full-stack application with Next.js frontend
 - **Location**: `/backend/`
 - **Framework**: FastAPI 0.104.1 with Python 3.11+
 - **Database**: PostgreSQL with SQLAlchemy 2.0
-- **Authentication**: Supabase Auth with advanced security features
+- **Authentication**: Modular Supabase Auth with endpoint separation
+- **Configuration**: Service-oriented configuration architecture
 - **Security**: MFA, RBAC, field encryption, audit logging
 - **Admin System**: User management, analytics dashboard, bulk operations
 - **GDPR Compliance**: Data retention, account deletion, privacy controls
@@ -71,6 +81,14 @@ npm run test:ui      # Run Vitest with UI
 npm run test:coverage # Run tests with coverage
 npm run test:unit    # Run unit tests only
 npm run test:components # Run component tests
+npm run test:performance # Run performance tests
+
+# Design System Commands
+npm run design:extract <screenshot>    # Extract tokens from screenshot
+npm run design:validate <url>          # Validate URL against reference
+npm run design:cache --stats           # Show cache statistics
+npm run design:init                    # Initialize design system
+npm run design:help                    # Show all available commands
 ```
 
 ### Backend
@@ -84,6 +102,12 @@ uvicorn app.main:app --reload  # Start development server
 pytest               # Run all tests
 pytest app/tests/    # Run specific test directory
 pytest --coverage    # Run with coverage
+
+# New utility scripts
+python scripts/migrate_config.py      # Migrate configuration between versions
+python scripts/generate_config_docs.py # Generate configuration documentation
+python scripts/detect_secrets.py      # Scan codebase for secrets
+python scripts/encrypt_existing_data.py # Encrypt existing database data
 ```
 
 ## Key Dependencies
@@ -91,14 +115,17 @@ pytest --coverage    # Run with coverage
 ### Frontend
 - **Next.js 15.3.5**: React framework with App Router
 - **React 19.0.0**: Latest React with concurrent features
-- **Tailwind CSS 4.0**: Utility-first CSS framework
+- **Tailwind CSS 4.0**: Utility-first CSS framework (updated from 3.x)
 - **Framer Motion**: Animation library
 - **Howler.js**: Audio library for sound effects
-- **Zustand**: State management
+- **Zustand 5.0.6**: State management (updated version)
 - **Lucide React**: Icon library
 - **Vitest**: Fast testing framework
 - **React Testing Library**: Component testing utilities
 - **Supabase**: Authentication and database client
+- **Zod 3.25.74**: Schema validation library (new)
+- **class-variance-authority 0.7.1**: Component variant management (new)
+- **tailwind-merge 3.3.1**: Tailwind class merging utility (new)
 
 ### Backend
 - **FastAPI 0.104.1**: Modern Python web framework
@@ -136,11 +163,22 @@ pytest --coverage    # Run with coverage
 - Use custom design tokens extracted from screenshots
 - Implement proper error boundaries
 
+### Configuration Management
+- Use ConfigServiceOrchestrator for all configuration access
+- Environment-specific validation is automatically applied
+- Run `python scripts/generate_config_docs.py` to update configuration documentation
+- Use `python scripts/migrate_config.py` when updating configuration schema
+- Configuration changes require validation through ConfigValidationService
+
 ### Security Guidelines
 - **Authentication**: Always use MFA for admin accounts
 - **Data Protection**: Encrypt sensitive fields at the database level
+- **Input Sanitization**: Automatic XSS prevention through SanitizationMiddleware
+- **SQL Injection Protection**: Built-in protection in sanitization middleware
+- **File Upload Security**: Use FileUploadService for secure file handling
+- **Secret Detection**: Run `python scripts/detect_secrets.py` before commits
+- **Account Lockout**: Progressive lockout with multiple detection methods
 - **Session Management**: Implement secure session handling with proper expiration
-- **Input Validation**: Sanitize all user inputs through middleware
 - **Password Security**: Enforce strong password policies with Argon2 hashing
 - **Audit Logging**: Log all sensitive operations for compliance
 - **GDPR Compliance**: Follow data retention policies and provide data export
@@ -150,7 +188,9 @@ pytest --coverage    # Run with coverage
 ### Testing Guidelines
 - **Security Testing**: Test authentication flows and authorization
 - **Component Testing**: Use Vitest and React Testing Library
-- **API Testing**: Comprehensive pytest coverage for all endpoints
+- **API Testing**: Comprehensive pytest coverage for all endpoints (343+ test files)
+- **Performance Testing**: Run `npm run test:performance` for config performance
+- **Integration Testing**: Test configuration service integration
 - **Admin Testing**: Test admin dashboard functionality thoroughly
 - **Authentication Testing**: Test MFA, password reset, and session management
 
@@ -193,6 +233,13 @@ pytest --coverage    # Run with coverage
 │   ├── stores/      # Zustand state management
 │   ├── hooks/       # Custom React hooks
 │   ├── lib/         # Utility functions and configurations
+│   │   └── design-system/ # Comprehensive design system
+│   │       ├── cli/       # Command-line tools
+│   │       ├── extractor/ # Token extraction engine
+│   │       ├── validator/ # Visual validation system
+│   │       ├── tokens/    # Token management
+│   │       ├── config/    # Configuration generators
+│   │       └── docs/      # Design system documentation
 │   └── __tests__/   # Test files
 ├── public/          # Static assets
 └── package.json     # Dependencies and scripts
@@ -201,7 +248,19 @@ pytest --coverage    # Run with coverage
 ├── app/
 │   ├── api/         # API routes
 │   │   └── auth/    # Modular authentication endpoints
+│   │       ├── auth_registration.py
+│   │       ├── auth_login.py
+│   │       ├── auth_session.py
+│   │       ├── auth_password.py
+│   │       ├── auth_verification.py
+│   │       ├── auth_gdpr.py
+│   │       └── auth_mfa.py
 │   ├── core/        # Core functionality and configuration
+│   │   └── config/  # Service-oriented configuration
+│   │       ├── orchestrator.py
+│   │       ├── database_service.py
+│   │       ├── security_service.py
+│   │       └── validation_service.py
 │   ├── models/      # Database models with security features
 │   ├── schemas/     # Pydantic schemas
 │   ├── services/    # Business logic services
@@ -209,6 +268,8 @@ pytest --coverage    # Run with coverage
 │   ├── middleware/  # Security and validation middleware
 │   └── tests/       # Comprehensive test suite
 ├── alembic/         # Database migrations
+├── logs/            # Application logs
+│   └── audit/       # Audit logs with daily rotation
 ├── requirements.txt # Python dependencies
 └── scripts/         # Utility scripts
 
@@ -283,10 +344,19 @@ pytest --coverage    # Run with coverage
 4. Include comprehensive tests
 5. Document API endpoints
 
+### Service Development
+1. Define interface in `/app/interfaces/`
+2. Implement service in `/app/services/`
+3. Add repository if data access needed in `/app/repositories/`
+4. Write comprehensive tests following `test_*.py` convention
+5. Update configuration if needed through ConfigServiceOrchestrator
+
 ## Important Notes
 
 - **Text Fidelity**: Always reproduce text from screenshots exactly
 - **MVP Focus**: Prioritize core learning experience over advanced features
+- **Configuration Management**: Always use ConfigServiceOrchestrator, never access settings directly
+- **Modular Auth**: Auth endpoints are now modular - update imports accordingly
 - **Responsive Design**: Ensure mobile-first approach with proper breakpoints
 - **Performance**: Optimize for 3G networks and older devices
 - **Accessibility**: Implement proper ARIA labels and keyboard navigation

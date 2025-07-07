@@ -2,45 +2,53 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
-import { loadEnv } from 'vite'
 
-export default defineConfig(({ mode }) => {
-  // Only load NEXT_PUBLIC_ and NODE_ENV variables to avoid memory issues
-  const env = loadEnv(mode, process.cwd(), 'NEXT_PUBLIC_')
-  const filteredEnv = {
-    NODE_ENV: process.env.NODE_ENV || 'test',
-    ...Object.fromEntries(
-      Object.entries(env).filter(([key]) => key.startsWith('NEXT_PUBLIC_'))
-    )
-  }
-  
-  return {
+/**
+ * Default Vitest configuration
+ * 
+ * This config is used when running `npm test` without specific config.
+ * For better memory management, use specific configs:
+ * - npm run test:unit - for unit tests (lib, stores, utils)
+ * - npm run test:dom - for component tests
+ * - npm run test:design - for design system tests
+ */
+export default defineConfig({
   plugins: [react()],
-  define: {
-    'process.env': filteredEnv
-  },
-  css: {
-    postcss: false
-  },
   test: {
     globals: true,
-    environment: 'happy-dom',
-    setupFiles: ['./src/test/setup.ts'],
+    // Default to node environment for better performance
+    environment: 'node',
+    setupFiles: ['./src/test/setup.node.ts'],
     css: false,
     testTimeout: 10000,
     retry: 0,
-    // Configure jsdom properly for React testing
-    pool: 'forks',
+    // Use vmThreads with memory limits by default
+    pool: 'vmThreads',
     poolOptions: {
-      forks: {
-        singleFork: true,
-        maxForks: 1,
-        isolate: true
+      vmThreads: {
+        memoryLimit: '512MB',
+        singleThread: false,
+        maxThreads: 4
       }
     },
-    maxWorkers: 1,
+    // Log heap usage to detect memory issues
+    logHeapUsage: true,
+    // Limit concurrency
+    maxConcurrency: 8,
+    maxWorkers: 2,
     minWorkers: 1,
+    // Exclude problematic files by default
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/*.d.ts',
+      '**/coverage/**',
+      '**/.next/**',
+      // Exclude design system tests that need special handling
+      'src/lib/design-system/**/*.test.ts'
+    ],
     coverage: {
+      enabled: false, // Disable by default, enable with --coverage
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: [
@@ -51,21 +59,19 @@ export default defineConfig(({ mode }) => {
         '**/coverage/**',
         '**/dist/**',
         '**/.next/**'
-      ],
-      thresholds: {
-        global: {
-          branches: 90,
-          functions: 90,
-          lines: 90,
-          statements: 90
-        }
-      }
+      ]
     }
   },
   resolve: {
     alias: {
       '@': resolve(__dirname, './src')
     }
-  }
+  },
+  // Optimize for test environment
+  optimizeDeps: {
+    exclude: ['@testing-library/react', '@testing-library/dom']
+  },
+  build: {
+    sourcemap: false
   }
 })

@@ -1,0 +1,485 @@
+name: Design System Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**/*.ts'
+      - 'frontend/**/*.tsx'
+      - 'frontend/**/*.css'
+      - 'frontend/**/*.scss'
+      - 'frontend/**/*.png'
+      - 'frontend/**/*.jpg'
+      - 'frontend/**/*.jpeg'
+      - 'frontend/**/*.gif'
+      - 'frontend/**/*.svg'
+      - 'frontend/**/design-system/**'
+      - 'frontend/**/tokens/**'
+      - 'frontend/validation.config.json'
+      - 'frontend/reference-screenshots/**'
+      - '.github/workflows/design-system-validation.yml'
+  
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**/*.ts'
+      - 'frontend/**/*.tsx'
+      - 'frontend/**/*.css'
+      - 'frontend/**/*.scss'
+      - 'frontend/**/*.png'
+      - 'frontend/**/*.jpg'
+      - 'frontend/**/*.jpeg'
+      - 'frontend/**/*.gif'
+      - 'frontend/**/*.svg'
+      - 'frontend/**/design-system/**'
+      - 'frontend/**/tokens/**'
+      - 'frontend/validation.config.json'
+      - 'frontend/reference-screenshots/**'
+      - '.github/workflows/design-system-validation.yml'
+
+# Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      validation_mode:
+        description: 'Validation mode'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - 'full'
+          - 'quick'
+          - 'tokens-only'
+      report_format:
+        description: 'Report format'
+        required: false
+        default: 'html'
+        type: choice
+        options:
+          - 'html'
+          - 'json'
+          - 'both'
+
+env:
+  NODE_VERSION: '20'
+  VALIDATION_TIMEOUT: '300000'  # 5 minutes
+  CACHE_VERSION: 'v1'
+
+jobs:
+  # Pre-validation checks
+  pre-validation:
+    name: Pre-validation Checks
+    runs-on: ubuntu-latest
+    outputs:
+      has-design-changes: ${{ steps.check-changes.outputs.has-design-changes }}
+      has-token-changes: ${{ steps.check-changes.outputs.has-token-changes }}
+      has-validation-config: ${{ steps.check-changes.outputs.has-validation-config }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for design-related changes
+        id: check-changes
+        run: |
+          # Check if this is a PR or push
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+          
+          # Get list of changed files
+          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA 2>/dev/null || echo "")
+          
+          # Check for design-related changes
+          if echo "$CHANGED_FILES" | grep -E "\.(tsx?|css|scss|less|png|jpg|jpeg|gif|svg)$|design-system|tokens|validation" > /dev/null; then
+            echo "has-design-changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-design-changes=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check for token-specific changes
+          if echo "$CHANGED_FILES" | grep -E "tokens.*\.(ts|js|css)$" > /dev/null; then
+            echo "has-token-changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-token-changes=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check for validation config
+          if [ -f "frontend/validation.config.json" ]; then
+            echo "has-validation-config=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-validation-config=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Token validation job
+  token-validation:
+    name: Design Token Validation
+    runs-on: ubuntu-latest
+    needs: pre-validation
+    if: needs.pre-validation.outputs.has-design-changes == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Cache design system artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/src/lib/design-system/tokens/generated
+            frontend/.design-cache
+          key: design-system-${{ env.CACHE_VERSION }}-${{ hashFiles('frontend/src/lib/design-system/**/*.ts') }}
+          restore-keys: |
+            design-system-${{ env.CACHE_VERSION }}-
+
+      - name: Validate token file syntax
+        working-directory: frontend
+        run: |
+          echo "🔍 Checking token file syntax..."
+          
+          # Find all token files
+          TOKEN_FILES=$(find src/lib/design-system/tokens -name "*.ts" -o -name "*.js" -o -name "*.css" 2>/dev/null || echo "")
+          
+          if [ -n "$TOKEN_FILES" ]; then
+            echo "Found token files:"
+            echo "$TOKEN_FILES"
+            
+            # Check TypeScript/JavaScript files
+            for file in $TOKEN_FILES; do
+              if [[ "$file" =~ \.(ts|js)$ ]]; then
+                echo "Checking syntax: $file"
+                npx tsc --noEmit --skipLibCheck "$file" || exit 1
+              fi
+            done
+            
+            echo "✅ All token files have valid syntax"
+          else
+            echo "ℹ️ No token files found"
+          fi
+
+      - name: Run design system tests
+        working-directory: frontend
+        run: |
+          echo "🧪 Running design system tests..."
+          npm run test:design
+
+      - name: Generate token documentation
+        working-directory: frontend
+        if: needs.pre-validation.outputs.has-token-changes == 'true'
+        run: |
+          echo "📚 Generating token documentation..."
+          
+          # Check if we have tokens to document
+          if [ -d "src/lib/design-system/tokens/generated" ]; then
+            mkdir -p validation-reports
+            
+            # Generate documentation using CLI if available
+            if npm run design:extract -- --help &> /dev/null; then
+              echo "ℹ️ Token extraction CLI available"
+            fi
+          fi
+
+  # Visual validation job
+  visual-validation:
+    name: Visual Validation
+    runs-on: ubuntu-latest
+    needs: [pre-validation, token-validation]
+    if: needs.pre-validation.outputs.has-validation-config == 'true' && needs.pre-validation.outputs.has-design-changes == 'true'
+    
+    services:
+      # Chrome service for Puppeteer
+      chrome:
+        image: browserless/chrome:latest
+        ports:
+          - 3000:3000
+        options: --shm-size=2gb
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Cache validation artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/.validation-cache
+            frontend/node_modules/.cache/puppeteer
+          key: validation-cache-${{ env.CACHE_VERSION }}-${{ github.sha }}
+          restore-keys: |
+            validation-cache-${{ env.CACHE_VERSION }}-
+
+      - name: Setup Chrome dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            fonts-liberation \
+            libasound2 \
+            libatk-bridge2.0-0 \
+            libatk1.0-0 \
+            libatspi2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libgtk-3-0 \
+            libnspr4 \
+            libnss3 \
+            libx11-xcb1 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libxss1 \
+            libxtst6 \
+            xdg-utils
+
+      - name: Validate validation configuration
+        working-directory: frontend
+        run: |
+          echo "🔧 Validating configuration..."
+          
+          if [ -f "validation.config.json" ]; then
+            # Basic JSON validation
+            node -e "JSON.parse(require('fs').readFileSync('validation.config.json', 'utf8'))" || exit 1
+            echo "✅ Configuration file is valid JSON"
+            
+            # Show configuration summary
+            echo "📋 Configuration summary:"
+            node -e "
+              const config = JSON.parse(require('fs').readFileSync('validation.config.json', 'utf8'));
+              console.log('Screens:', config.screens?.length || 0);
+              console.log('Settings:', Object.keys(config.settings || {}).join(', '));
+            "
+          else
+            echo "❌ No validation configuration found"
+            exit 1
+          fi
+
+      - name: Run visual validation
+        working-directory: frontend
+        timeout-minutes: 15
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
+          PUPPETEER_EXECUTABLE_PATH: '/usr/bin/google-chrome-stable'
+        run: |
+          echo "🎯 Running visual validation..."
+          
+          # Determine validation mode
+          MODE="${{ github.event.inputs.validation_mode || 'full' }}"
+          REPORT_FORMAT="${{ github.event.inputs.report_format || 'html' }}"
+          
+          case "$MODE" in
+            "quick")
+              CONCURRENT=2
+              TIMEOUT=60000
+              ;;
+            "tokens-only")
+              echo "ℹ️ Tokens-only mode - skipping visual validation"
+              exit 0
+              ;;
+            *)
+              CONCURRENT=1
+              TIMEOUT=${{ env.VALIDATION_TIMEOUT }}
+              ;;
+          esac
+          
+          # Create reports directory
+          mkdir -p validation-reports
+          
+          # Run validation with appropriate settings
+          npm run design:validate:batch validation.config.json -- \
+            --output validation-reports \
+            --concurrent $CONCURRENT \
+            --timeout $TIMEOUT \
+            --format html json \
+            --headless \
+            --cache \
+            --verbose
+          
+          echo "✅ Visual validation completed"
+
+      - name: Process validation results
+        working-directory: frontend
+        if: always()
+        run: |
+          echo "📊 Processing validation results..."
+          
+          if [ -d "validation-reports" ]; then
+            # Count results
+            TOTAL_REPORTS=$(find validation-reports -name "*.json" | wc -l)
+            
+            if [ "$TOTAL_REPORTS" -gt 0 ]; then
+              echo "Generated $TOTAL_REPORTS validation reports"
+              
+              # Extract summary information
+              node -e "
+                const fs = require('fs');
+                const reports = fs.readdirSync('validation-reports')
+                  .filter(f => f.endsWith('.json'))
+                  .map(f => JSON.parse(fs.readFileSync(\`validation-reports/\${f}\`, 'utf8')));
+                
+                if (reports.length > 0) {
+                  const summary = reports.reduce((acc, report) => {
+                    acc.total += report.summary?.totalTests || 0;
+                    acc.passed += report.summary?.passed || 0;
+                    acc.failed += report.summary?.failed || 0;
+                    return acc;
+                  }, { total: 0, passed: 0, failed: 0 });
+                  
+                  console.log('📈 Validation Summary:');
+                  console.log(\`  Total: \${summary.total}\`);
+                  console.log(\`  Passed: \${summary.passed}\`);
+                  console.log(\`  Failed: \${summary.failed}\`);
+                  console.log(\`  Success Rate: \${summary.total > 0 ? Math.round((summary.passed / summary.total) * 100) : 0}%\`);
+                  
+                  // Set output for next steps
+                  require('fs').writeFileSync(process.env.GITHUB_ENV, \`VALIDATION_PASSED=\${summary.failed === 0}\n\`, { flag: 'a' });
+                }
+              " || echo "Could not process validation results"
+            else
+              echo "No validation reports generated"
+              echo "VALIDATION_PASSED=false" >> $GITHUB_ENV
+            fi
+          else
+            echo "No validation reports directory found"
+            echo "VALIDATION_PASSED=false" >> $GITHUB_ENV
+          fi
+
+      - name: Upload validation reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-reports-${{ github.run_number }}
+          path: frontend/validation-reports/
+          retention-days: 30
+
+      - name: Upload validation cache
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-cache-${{ github.run_number }}
+          path: frontend/.validation-cache/
+          retention-days: 7
+
+      - name: Comment PR with results
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request' && always()
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'frontend/validation-reports';
+            
+            let comment = '## 🎨 Design System Validation Results\n\n';
+            
+            if (fs.existsSync(path)) {
+              const files = fs.readdirSync(path).filter(f => f.endsWith('.json'));
+              
+              if (files.length > 0) {
+                // Read the first report for summary
+                const report = JSON.parse(fs.readFileSync(`${path}/${files[0]}`, 'utf8'));
+                const summary = report.summary || {};
+                
+                const passed = process.env.VALIDATION_PASSED === 'true';
+                const status = passed ? '✅ PASSED' : '❌ FAILED';
+                
+                comment += `**Status:** ${status}\n\n`;
+                comment += `**Summary:**\n`;
+                comment += `- Total Tests: ${summary.totalTests || 0}\n`;
+                comment += `- Passed: ${summary.passed || 0}\n`;
+                comment += `- Failed: ${summary.failed || 0}\n`;
+                comment += `- Success Rate: ${summary.totalTests > 0 ? Math.round(((summary.passed || 0) / summary.totalTests) * 100) : 0}%\n\n`;
+                
+                if (summary.failed > 0) {
+                  comment += '**Action Required:** Please review the validation failures and update your implementation or reference screenshots.\n\n';
+                }
+                
+                comment += `**Reports:** Check the "validation-reports-${{ github.run_number }}" artifact for detailed results.\n`;
+              } else {
+                comment += '❌ No validation reports generated.\n';
+              }
+            } else {
+              comment += '❌ Validation reports directory not found.\n';
+            }
+            
+            comment += `\n---\n*Validation run: ${context.runNumber} | Commit: ${context.sha.substring(0, 7)}*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Fail on validation errors
+        if: env.VALIDATION_PASSED == 'false'
+        run: |
+          echo "❌ Visual validation failed!"
+          echo "Check the validation reports for details."
+          exit 1
+
+  # Summary job
+  validation-summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [pre-validation, token-validation, visual-validation]
+    if: always() && needs.pre-validation.outputs.has-design-changes == 'true'
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🎨 Design System Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check job statuses
+          TOKEN_STATUS="${{ needs.token-validation.result }}"
+          VISUAL_STATUS="${{ needs.visual-validation.result }}"
+          
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Token Validation | ${TOKEN_STATUS} |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.pre-validation.outputs.has-validation-config }}" = "true" ]; then
+            echo "| Visual Validation | ${VISUAL_STATUS} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Visual Validation | skipped (no config) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Overall result
+          if [ "$TOKEN_STATUS" = "success" ] && ([ "$VISUAL_STATUS" = "success" ] || [ "$VISUAL_STATUS" = "skipped" ]); then
+            echo "✅ **Overall Result: PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Overall Result: FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- Review any failed validations" >> $GITHUB_STEP_SUMMARY
+          echo "- Update implementation or reference screenshots as needed" >> $GITHUB_STEP_SUMMARY
+          echo "- Check artifacts for detailed reports" >> $GITHUB_STEP_SUMMARY
