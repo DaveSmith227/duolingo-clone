@@ -1,291 +1,117 @@
-# CLAUDE.md
+# CLAUDE.md - Duolingo Clone Project Overview
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Quick Navigation
+
+For detailed domain-specific guidance, see:
+- **Backend Development** → [`/backend/CLAUDE.md`](/backend/CLAUDE.md)
+- **Frontend Development** → [`/frontend/CLAUDE.md`](/frontend/CLAUDE.md)
+- **Design System** → [`/frontend/src/lib/design-system/CLAUDE.md`](/frontend/src/lib/design-system/CLAUDE.md)
+- **Testing Guide** → [`/docs/testing/CLAUDE.md`](/docs/testing/CLAUDE.md)
+- **Security Guide** → [`/docs/security/CLAUDE.md`](/docs/security/CLAUDE.md)
 
 ## Project Overview
 
 This is a Duolingo clone built as a full-stack application with Next.js frontend and FastAPI backend. The project emphasizes pixel-perfect design implementation using screenshot references and AI-assisted development workflows.
 
-## Architecture
+## Core Architecture Summary
 
-### Security Architecture
-- **Authentication**: Multi-factor authentication with Supabase integration
-- **Authorization**: Role-based access control (RBAC) system
-- **Data Protection**: Field-level encryption for sensitive data
-- **Session Management**: Secure session handling with remember-me functionality
-- **Audit Logging**: Comprehensive audit trail for all user actions
-- **GDPR Compliance**: Data retention policies and account deletion workflows
-- **Password Security**: Argon2 hashing with complexity requirements
-- **Rate Limiting**: Brute force protection and API rate limiting
+- **Frontend**: Next.js 15 with App Router, Tailwind CSS 4.0, React 19
+- **Backend**: FastAPI with Python 3.11+, PostgreSQL, SQLAlchemy 2.0
+- **Authentication**: Supabase Auth with MFA, RBAC, field encryption
+- **Configuration**: Service-oriented architecture with ConfigServiceOrchestrator
+- **Design System**: AI-powered token extraction and visual validation
+- **Testing**: Comprehensive test coverage (343+ backend, 200+ frontend tests)
 
-### Admin System
-- **User Management**: Comprehensive user administration dashboard
-- **Analytics Dashboard**: Real-time user engagement and authentication metrics
-- **Bulk Operations**: Mass user actions with audit logging
-- **System Monitoring**: Health checks and diagnostic tools
-- **Audit Log Viewer**: Searchable audit trail with filtering
-- **Data Export**: GDPR-compliant data export functionality
+For detailed architecture documentation, see the domain-specific CLAUDE.md files linked above.
 
-### Configuration Service Architecture
-- **Service-Oriented Design**: Modular configuration system with specialized services
-- **ConfigServiceOrchestrator**: Central orchestrator managing all configuration services
-- **DatabaseConfigService**: Database-specific configuration handling
-- **SecurityConfigService**: Security settings and validation
-- **ConfigValidationService**: Cross-service validation orchestration
-- **Environment-Specific Validation**: Different rules for dev/staging/production
-- **Migration Support**: Configuration migration tools with version tracking
+## Context Markers for AI
 
-### Frontend (Next.js 15)
-- **Location**: `/frontend/`
-- **Framework**: Next.js 15.3.5 with App Router
-- **Styling**: Tailwind CSS 4.0 with custom design tokens
-- **State Management**: Zustand
-- **Animations**: Framer Motion
-- **Audio**: Howler.js for sound effects
-- **Icons**: Lucide React
-- **Testing**: Vitest with React Testing Library
-- **Authentication**: Supabase Auth integration
-- **Runtime**: React 19.0.0
+When working on:
+- **Backend APIs or configuration** → See [`/backend/CLAUDE.md`](/backend/CLAUDE.md)
+- **Frontend components or state** → See [`/frontend/CLAUDE.md`](/frontend/CLAUDE.md)
+- **Design tokens or validation** → See [`/frontend/src/lib/design-system/CLAUDE.md`](/frontend/src/lib/design-system/CLAUDE.md)
+- **Test failures or memory issues** → See [`/docs/testing/CLAUDE.md`](/docs/testing/CLAUDE.md)
+- **Security or authentication** → See [`/docs/security/CLAUDE.md`](/docs/security/CLAUDE.md)
 
-### Backend (FastAPI/Python)
-- **Location**: `/backend/`
-- **Framework**: FastAPI 0.104.1 with Python 3.11+
-- **Database**: PostgreSQL with SQLAlchemy 2.0
-- **Authentication**: Modular Supabase Auth with endpoint separation
-- **Configuration**: Service-oriented configuration architecture
-- **Security**: MFA, RBAC, field encryption, audit logging
-- **Admin System**: User management, analytics dashboard, bulk operations
-- **GDPR Compliance**: Data retention, account deletion, privacy controls
-- **AI Integration**: OpenAI API + LangChain
-- **Caching**: Redis
-- **Task Queue**: Celery
-- **Testing**: Comprehensive pytest test suite
-
-### Design System
-- **Screenshot References**: `/design-reference/` - Contains iOS and web screenshots for pixel-perfect implementation
-- **Priority Order**: Landing page → iOS onboarding → profile creation → home → lesson completion
-- **Important**: Ignore black "curated by Mobbin" banners in screenshots
-- **Text Fidelity**: All text content must match screenshots exactly
-
-## Development Commands
+## Quick Start Commands
 
 ### Frontend
 ```bash
 cd frontend
-npm run dev          # Start development server with Turbopack
-npm run build        # Build for production
-npm run lint         # Run ESLint
-npm run start        # Start production server
-npm run test         # Run Vitest tests
-npm run test:ui      # Run Vitest with UI
-npm run test:coverage # Run tests with coverage
-npm run test:unit    # Run unit tests only
-npm run test:components # Run component tests
-npm run test:performance # Run performance tests
-
-# Design System Commands
-npm run design:extract <screenshot>    # Extract tokens from screenshot
-npm run design:validate <url>          # Validate URL against reference
-npm run design:cache --stats           # Show cache statistics
-npm run design:init                    # Initialize design system
-npm run design:help                    # Show all available commands
+npm install
+npm run dev          # Start development server
+npm run test         # Run tests
+npm run design:help  # Design system commands
 ```
 
 ### Backend
 ```bash
 cd backend
-# Setup virtual environment first
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload  # Start development server
-pytest               # Run all tests
-pytest app/tests/    # Run specific test directory
-pytest --coverage    # Run with coverage
-
-# New utility scripts
-python scripts/migrate_config.py      # Migrate configuration between versions
-python scripts/generate_config_docs.py # Generate configuration documentation
-python scripts/detect_secrets.py      # Scan codebase for secrets
-python scripts/encrypt_existing_data.py # Encrypt existing database data
+uvicorn app.main:app --reload  # Start server
+pytest               # Run tests
 ```
 
-## Key Dependencies
-
-### Frontend
-- **Next.js 15.3.5**: React framework with App Router
-- **React 19.0.0**: Latest React with concurrent features
-- **Tailwind CSS 4.0**: Utility-first CSS framework (updated from 3.x)
-- **Framer Motion**: Animation library
-- **Howler.js**: Audio library for sound effects
-- **Zustand 5.0.6**: State management (updated version)
-- **Lucide React**: Icon library
-- **Vitest**: Fast testing framework
-- **React Testing Library**: Component testing utilities
-- **Supabase**: Authentication and database client
-- **Zod 3.25.74**: Schema validation library (new)
-- **class-variance-authority 0.7.1**: Component variant management (new)
-- **tailwind-merge 3.3.1**: Tailwind class merging utility (new)
-
-### Backend
-- **FastAPI 0.104.1**: Modern Python web framework
-- **SQLAlchemy 2.0**: Database ORM with modern async support
-- **PostgreSQL**: Primary database
-- **Redis 5.0**: Caching and task queue
-- **OpenAI 1.3.7**: AI content generation
-- **LangChain**: AI workflow orchestration
-- **Supabase 2.0.2**: Authentication and database integration
-- **Pydantic 2.11+**: Data validation and settings management
-- **PyJWT**: JSON Web Token handling
-- **Argon2**: Password hashing
-- **Pytest**: Comprehensive testing framework
+For comprehensive command documentation, see the domain-specific CLAUDE.md files.
 
 ## Development Guidelines
 
-### Screenshot-Based Development
-1. **Primary Reference**: Use screenshots in `/design-reference/` for all UI components
-2. **Text Extraction**: Extract all text content exactly as shown (headlines, CTAs, copy)
-3. **Color Extraction**: Use AI vision to identify exact color values
-4. **Responsive Design**: Reference both iOS and web screenshots for responsive behavior
-5. **Ignore Watermarks**: Always ignore "curated by Mobbin" banners
+### Critical Rules
+- **NEVER** access configuration directly - use ConfigServiceOrchestrator
+- **ALWAYS** extract design tokens before building new components
+- **NEVER** create files unless absolutely necessary
+- **ALWAYS** prefer editing existing files over creating new ones
+- **NEVER** proactively create documentation files unless requested
 
-### MVP Scope Enforcement
-- Focus on P0 features only during initial development
-- Landing page is highest priority (Week 1)
-- Core learning loop: translation, multiple choice, listening exercises
-- Basic gamification: XP, hearts, streaks
-- Essential user flows: registration, profile creation, lesson completion
+### Performance Requirements
+- Page load time < 3 seconds on 3G networks
+- API response time < 200ms
+- Test suite execution < 5 minutes
+- Development memory usage < 2GB
 
-### Code Quality Standards
-- Use TypeScript for all React components
-- Implement mobile-first responsive design
-- Follow Next.js 15 App Router patterns
-- Use custom design tokens extracted from screenshots
-- Implement proper error boundaries
+### Common Pitfalls to Avoid
 
-### Configuration Management
-- Use ConfigServiceOrchestrator for all configuration access
-- Environment-specific validation is automatically applied
-- Run `python scripts/generate_config_docs.py` to update configuration documentation
-- Use `python scripts/migrate_config.py` when updating configuration schema
-- Configuration changes require validation through ConfigValidationService
+1. **Configuration Access**
+   - ❌ DON'T: `from app.core.config import settings`
+   - ✅ DO: Use ConfigServiceOrchestrator
 
-### Security Guidelines
-- **Authentication**: Always use MFA for admin accounts
-- **Data Protection**: Encrypt sensitive fields at the database level
-- **Input Sanitization**: Automatic XSS prevention through SanitizationMiddleware
-- **SQL Injection Protection**: Built-in protection in sanitization middleware
-- **File Upload Security**: Use FileUploadService for secure file handling
-- **Secret Detection**: Run `python scripts/detect_secrets.py` before commits
-- **Account Lockout**: Progressive lockout with multiple detection methods
-- **Session Management**: Implement secure session handling with proper expiration
-- **Password Security**: Enforce strong password policies with Argon2 hashing
-- **Audit Logging**: Log all sensitive operations for compliance
-- **GDPR Compliance**: Follow data retention policies and provide data export
-- **Rate Limiting**: Implement rate limiting to prevent abuse
-- **Authorization**: Use RBAC to control access to admin features
+2. **Design Implementation**
+   - ❌ DON'T: Build UI without extracting design tokens
+   - ✅ DO: Run `npm run design:extract` first
 
-### Testing Guidelines
-- **Security Testing**: Test authentication flows and authorization
-- **Component Testing**: Use Vitest and React Testing Library
-- **API Testing**: Comprehensive pytest coverage for all endpoints (343+ test files)
-- **Performance Testing**: Run `npm run test:performance` for config performance
-- **Integration Testing**: Test configuration service integration
-- **Admin Testing**: Test admin dashboard functionality thoroughly
-- **Authentication Testing**: Test MFA, password reset, and session management
+3. **Test Creation**
+   - ❌ DON'T: Create test files without proper config
+   - ✅ DO: Use appropriate Vitest configuration
 
-### Design System Implementation
-- Extract design tokens from screenshots before building components
-- Use consistent spacing system (4px grid: 4, 8, 12, 16, 24, 32, 48, 64)
-- Implement Duolingo's signature rounded corners (8px, 12px, 16px, 24px)
-- Use pill-shaped buttons with 48px standard height
-- Apply consistent shadows and color system
+4. **Security**
+   - ❌ DON'T: Store secrets in code or config files
+   - ✅ DO: Use environment variables and secret management
 
-## Testing Strategy
+## MVP Scope & Priority
 
-### Frontend Testing
-```bash
-cd frontend
-npm run test         # Run Vitest tests
-npm run test:ui      # Run Vitest with UI
-npm run test:coverage # Run tests with coverage
-npm run test:components # Run component tests
-```
+### P0 Features (Must Have)
+- Landing page (pixel-perfect)
+- User authentication (register/login)
+- Core learning loop (3 exercise types)
+- Progress tracking (XP, hearts, streaks)
+- 5 Spanish skills with 15 lessons
 
-### Backend Testing
-```bash
-cd backend
-pytest               # Run Python tests
-pytest app/tests/    # Run specific test directory
-pytest --coverage    # Run with coverage
-```
+### P1 Features (Nice to Have)
+- Achievements system
+- Statistics page
+- Sound effects and animations
+- Keyboard shortcuts
 
-## File Structure
+## File Structure Overview
 
-```
-/frontend/
-├── src/
-│   ├── app/         # Next.js App Router pages
-│   ├── components/  # Reusable UI components
-│   │   ├── auth/    # Authentication components
-│   │   ├── admin/   # Admin dashboard components
-│   │   └── ui/      # Base UI components
-│   ├── stores/      # Zustand state management
-│   ├── hooks/       # Custom React hooks
-│   ├── lib/         # Utility functions and configurations
-│   │   └── design-system/ # Comprehensive design system
-│   │       ├── cli/       # Command-line tools
-│   │       ├── extractor/ # Token extraction engine
-│   │       ├── validator/ # Visual validation system
-│   │       ├── tokens/    # Token management
-│   │       ├── config/    # Configuration generators
-│   │       └── docs/      # Design system documentation
-│   └── __tests__/   # Test files
-├── public/          # Static assets
-└── package.json     # Dependencies and scripts
-
-/backend/
-├── app/
-│   ├── api/         # API routes
-│   │   └── auth/    # Modular authentication endpoints
-│   │       ├── auth_registration.py
-│   │       ├── auth_login.py
-│   │       ├── auth_session.py
-│   │       ├── auth_password.py
-│   │       ├── auth_verification.py
-│   │       ├── auth_gdpr.py
-│   │       └── auth_mfa.py
-│   ├── core/        # Core functionality and configuration
-│   │   └── config/  # Service-oriented configuration
-│   │       ├── orchestrator.py
-│   │       ├── database_service.py
-│   │       ├── security_service.py
-│   │       └── validation_service.py
-│   ├── models/      # Database models with security features
-│   ├── schemas/     # Pydantic schemas
-│   ├── services/    # Business logic services
-│   ├── repositories/ # Data access layer
-│   ├── middleware/  # Security and validation middleware
-│   └── tests/       # Comprehensive test suite
-├── alembic/         # Database migrations
-├── logs/            # Application logs
-│   └── audit/       # Audit logs with daily rotation
-├── requirements.txt # Python dependencies
-└── scripts/         # Utility scripts
-
-/design-reference/   # Screenshot references for UI implementation
-├── landing-page/    # Marketing site screenshots (highest priority)
-├── ios/             # iOS app screenshots
-└── web/             # Web app screenshots
-
-/docs/               # Project documentation
-├── authentication/ # Auth system documentation
-└── security/       # Security assessments and guides
-
-/product-requirements/ # Product requirements and planning
-├── prds/            # Product requirement documents
-└── tasks/           # Task breakdowns and implementation guides
-```
+See domain-specific CLAUDE.md files for detailed structure:
+- Backend structure: [`/backend/CLAUDE.md`](/backend/CLAUDE.md)
+- Frontend structure: [`/frontend/CLAUDE.md`](/frontend/CLAUDE.md)
+- Design system: [`/frontend/src/lib/design-system/CLAUDE.md`](/frontend/src/lib/design-system/CLAUDE.md)
 
 ## AI Integration Points
 
@@ -318,47 +144,20 @@ pytest --coverage    # Run with coverage
 - Use pagination for large result sets
 - Implement database indexing for audit logs
 
-### Security Considerations
-- **Data Encryption**: All sensitive data encrypted at rest and in transit
-- **Session Security**: Secure session management with proper expiration
-- **Admin Access Control**: Multi-factor authentication for admin accounts
-- **Audit Trail**: Comprehensive logging for compliance and security monitoring
-- **Rate Limiting**: Protection against brute force attacks
-- **Input Sanitization**: All user inputs sanitized through middleware
-- **GDPR Compliance**: Data retention policies and user data export capabilities
-- **Security Headers**: Proper security headers in all responses
-
-## Common Development Patterns
-
-### Component Development
-1. Analyze screenshot references first
-2. Extract design tokens (colors, spacing, typography)
-3. Build component with TypeScript
-4. Implement responsive behavior
-5. Add to Storybook for documentation
-
-### API Development
-1. Define Pydantic schemas for request/response
-2. Implement FastAPI endpoints with proper error handling
-3. Add database operations with SQLAlchemy
-4. Include comprehensive tests
-5. Document API endpoints
-
-### Service Development
-1. Define interface in `/app/interfaces/`
-2. Implement service in `/app/services/`
-3. Add repository if data access needed in `/app/repositories/`
-4. Write comprehensive tests following `test_*.py` convention
-5. Update configuration if needed through ConfigServiceOrchestrator
-
 ## Important Notes
 
 - **Text Fidelity**: Always reproduce text from screenshots exactly
-- **MVP Focus**: Prioritize core learning experience over advanced features
-- **Configuration Management**: Always use ConfigServiceOrchestrator, never access settings directly
-- **Modular Auth**: Auth endpoints are now modular - update imports accordingly
-- **Responsive Design**: Ensure mobile-first approach with proper breakpoints
-- **Performance**: Optimize for 3G networks and older devices
-- **Accessibility**: Implement proper ARIA labels and keyboard navigation
+- **Configuration**: Use ConfigServiceOrchestrator, never access settings directly
+- **Design System**: Run design:extract before building new components
+- **Testing**: Use appropriate Vitest config for test type
+- **Security**: Never commit secrets, use environment variables
 
-- All documentation files must use kebab-case filenames and be stored in the 'docs' folder or its subfolders.
+## Project Resources
+
+- [MVP Development Plan](/product-requirements/prds/mvp-development-plan.md)
+- [Design References](/design-reference/README.md)
+- [Architecture Decision Records](/docs/architecture-design-review/)
+
+---
+
+**Remember**: When in doubt, check the domain-specific CLAUDE.md file for detailed guidance.
