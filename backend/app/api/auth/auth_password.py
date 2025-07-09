@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 import secrets
 
-from app.core.database import get_db
+from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.auth import PasswordResetToken, PasswordHistory

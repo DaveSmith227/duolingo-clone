@@ -12,7 +12,7 @@ from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.auth import AuthSession, PasswordHistory
-from app.schemas.auth import UserRegister, UserResponse, AuthTokenResponse
+from app.schemas.auth import UserRegistrationRequest as UserRegister, UserResponse, AuthenticationResponse
 from app.services.auth_service import AuthService
 from app.services.cookie_manager import CookieManager
 from app.core.exceptions import RateLimitExceededError
@@ -24,7 +24,7 @@ settings = get_settings()
 router = APIRouter()
 
 
-@router.post("/register", response_model=AuthTokenResponse)
+@router.post("/register", response_model=AuthenticationResponse)
 @validate_request(**Validators.registration_validator())
 async def register(
     request: Request,

@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
-from app.models.auth import MFASettings, MFABackupCodes
+from app.models.mfa import MFASettings, MFABackupCodes
 from app.core.config import get_settings
 
 

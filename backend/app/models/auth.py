@@ -8,6 +8,7 @@ session management, and audit logging.
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 import json
+import uuid
 
 from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, Integer, JSON
 from sqlalchemy.orm import relationship, validates
@@ -145,6 +146,13 @@ class SupabaseUser(BaseModel):
         back_populates="supabase_user",
         cascade="all, delete-orphan",
         doc="Password reset tokens for this user"
+    )
+    
+    email_verification_tokens = relationship(
+        "EmailVerificationToken",
+        back_populates="supabase_user",
+        cascade="all, delete-orphan",
+        doc="Email verification tokens for this user"
     )
     
     @validates('sync_status')
@@ -709,3 +717,135 @@ class PasswordResetToken(BaseModel):
     
     def __repr__(self) -> str:
         return f"<PasswordResetToken(id={self.id}, user_id={self.supabase_user_id}, used={self.is_used})>"
+
+
+class EmailVerificationToken(BaseModel):
+    """
+    Email verification token model.
+    
+    Stores secure tokens for email verification functionality with expiration
+    and single-use constraints for security.
+    """
+    
+    __tablename__ = "email_verification_tokens"
+    
+    id = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        doc="Primary key UUID"
+    )
+    
+    supabase_user_id = Column(
+        String(36),
+        ForeignKey("supabase_users.supabase_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="Supabase user ID"
+    )
+    
+    token_hash = Column(
+        String(255),
+        nullable=False,
+        unique=True,
+        index=True,
+        doc="Secure hash of the verification token"
+    )
+    
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        doc="Token creation timestamp"
+    )
+    
+    expires_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        doc="Token expiration timestamp"
+    )
+    
+    verified_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        doc="Email verification timestamp"
+    )
+    
+    ip_address = Column(
+        String(45),  # IPv6 max length
+        nullable=True,
+        doc="IP address from token creation"
+    )
+    
+    user_agent = Column(
+        Text,
+        nullable=True,
+        doc="User agent from token creation"
+    )
+    
+    is_verified = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="Whether email has been verified"
+    )
+    
+    # Relationships
+    supabase_user = relationship(
+        "SupabaseUser",
+        back_populates="email_verification_tokens",
+        doc="Supabase user associated with this verification token"
+    )
+    
+    @validates('token_hash')
+    def validate_token_hash(self, key, token_hash):
+        """Validate token hash format."""
+        if not token_hash or len(token_hash) < 60:
+            raise ValueError("Token hash must be at least 60 characters long")
+        return token_hash
+    
+    @classmethod
+    def create_verification_token(
+        cls,
+        supabase_user_id: str,
+        token_hash: str,
+        expires_at: datetime,
+        ip_address: str = None,
+        user_agent: str = None
+    ) -> 'EmailVerificationToken':
+        """
+        Create email verification token.
+        
+        Args:
+            supabase_user_id: Supabase user ID
+            token_hash: Hashed verification token
+            expires_at: Token expiration time
+            ip_address: Client IP address
+            user_agent: Client user agent
+            
+        Returns:
+            EmailVerificationToken: Created token instance
+        """
+        return cls(
+            supabase_user_id=supabase_user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+    
+    def is_expired(self) -> bool:
+        """Check if token has expired."""
+        return datetime.now(timezone.utc) > self.expires_at
+    
+    def is_valid(self) -> bool:
+        """Check if token is valid (not verified and not expired)."""
+        return not self.is_verified and not self.is_expired()
+    
+    def mark_as_verified(self) -> None:
+        """Mark email as verified."""
+        self.is_verified = True
+        self.verified_at = datetime.now(timezone.utc)
+    
+    def __repr__(self) -> str:
+        return f"<EmailVerificationToken(id={self.id}, user_id={self.supabase_user_id}, verified={self.is_verified})>"

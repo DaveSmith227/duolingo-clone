@@ -8,6 +8,11 @@
  */
 
 import { vi } from 'vitest'
+import { loadEnv } from 'vite'
+
+// Load environment variables for tests
+const env = loadEnv('test', process.cwd(), '')
+Object.assign(process.env, env)
 
 // Mock console methods to reduce noise in tests
 global.console = {
