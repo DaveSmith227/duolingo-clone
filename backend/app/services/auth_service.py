@@ -18,7 +18,7 @@ from app.services.mfa_service import MFAService
 from app.services.email_service import EmailService
 from app.services.rate_limiter import RateLimiter
 from app.services.audit_logger import AuditLogger
-from app.services.account_lockout import AccountLockout
+from app.services.account_lockout import AccountLockoutService
 from app.core.config import get_settings
 from app.core.exceptions import (
     AuthenticationError,
@@ -48,7 +48,7 @@ class AuthService:
         email_service: Optional[EmailService] = None,
         rate_limiter: Optional[RateLimiter] = None,
         audit_logger: Optional[AuditLogger] = None,
-        account_lockout: Optional[AccountLockout] = None
+        account_lockout: Optional[AccountLockoutService] = None
     ):
         """Initialize authentication service with dependencies."""
         self.db = db
@@ -65,7 +65,7 @@ class AuthService:
         self.email_service = email_service or EmailService(self.settings)
         self.rate_limiter = rate_limiter or RateLimiter(self.settings)
         self.audit_logger = audit_logger or AuditLogger(db)
-        self.account_lockout = account_lockout or AccountLockout(db, self.settings)
+        self.account_lockout = account_lockout or AccountLockoutService(db, self.settings)
     
     async def register_user(
         self,

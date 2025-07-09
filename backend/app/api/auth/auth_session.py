@@ -9,11 +9,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import jwt
 
-from app.core.database import get_db
+from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.auth import AuthSession
-from app.schemas.auth import AuthTokenResponse, UserResponse
+from app.schemas.auth import TokenResponse, UserResponse
 from app.services.session_manager import SessionManager
 from app.services.audit_logger import AuditLogger
 from app.services.cookie_manager import CookieManager
@@ -82,7 +82,7 @@ async def get_current_user(
         )
 
 
-@router.post("/refresh", response_model=AuthTokenResponse)
+@router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     request: Request,
     response: Response,

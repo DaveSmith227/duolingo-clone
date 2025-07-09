@@ -5,10 +5,18 @@ for the Duolingo clone backend with comprehensive middleware, error handling,
 and monitoring capabilities.
 """
 
+from dotenv import load_dotenv
+import os
 import logging
 import time
 from contextlib import asynccontextmanager
 from typing import Dict, Any
+
+# Load environment variables before any other imports
+load_dotenv()
+
+# Verify environment variables are loaded
+print(f"Environment loaded. API keys available: Claude={bool(os.getenv('ANTHROPIC_API_KEY'))}, OpenAI={bool(os.getenv('OPENAI_API_KEY'))}")
 
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -327,6 +335,10 @@ def setup_routes(app: FastAPI) -> None:
     # Include users router
     from app.api.users import router as users_router
     app.include_router(users_router)
+    
+    # Include design system router
+    from app.api.design_system import router as design_system_router
+    app.include_router(design_system_router)
     
     # Include audit router (admin only)
     try:

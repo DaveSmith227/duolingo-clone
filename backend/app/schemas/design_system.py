@@ -59,11 +59,14 @@ class SemanticColors(BaseModel):
     @validator('*')
     def validate_hex_color(cls, v):
         """Validate individual hex colors"""
-        if v is not None:
+        if v is not None and v != "":
             import re
             hex_pattern = re.compile(r'^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$')
             if not hex_pattern.match(v):
                 raise ValueError(f"Invalid hex color: {v}")
+        elif v == "":
+            # Convert empty strings to None
+            return None
         return v
 
 
@@ -131,8 +134,8 @@ class SpacingScale(BaseModel):
 
 class ComponentSpacing(BaseModel):
     """Schema for component-specific spacing"""
-    padding: Optional[Dict[str, str]] = Field(None, description="Padding values")
-    margin: Optional[Dict[str, str]] = Field(None, description="Margin values")
+    padding: Optional[Union[str, Dict[str, str]]] = Field(None, description="Padding values")
+    margin: Optional[Union[str, Dict[str, str]]] = Field(None, description="Margin values")
     gap: Optional[str] = Field(None, description="Gap/spacing between elements")
 
 

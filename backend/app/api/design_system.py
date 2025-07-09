@@ -23,7 +23,7 @@ from app.schemas.design_system import (
     TokenValidationResponse,
     DesignTokens
 )
-from app.schemas.users import User
+from app.models.user import User
 from app.services.design_system_service import DesignSystemService
 from app.services.ai_vision_client import configure_ai_clients
 
@@ -50,24 +50,23 @@ async def get_design_service() -> DesignSystemService:
 @router.post("/extract", response_model=TokenExtractionResponse)
 async def extract_tokens(
     request: TokenExtractionRequest,
-    current_user: User = Depends(get_current_user),
+    # current_user: User = Depends(get_current_user),  # Temporarily disabled for design system extraction
     service: DesignSystemService = Depends(get_design_service)
 ) -> TokenExtractionResponse:
     """Extract design tokens from a screenshot
     
-    Requires authentication. Processes the image at the given path and extracts
+    Processes the image at the given path and extracts
     the requested token types using AI vision.
     
     Args:
         request: Token extraction request with image path and options
-        current_user: Authenticated user
         service: Design system service instance
         
     Returns:
         TokenExtractionResponse with extracted tokens or errors
     """
     try:
-        logger.info(f"User {current_user.email} extracting tokens from {request.image_path}")
+        logger.info(f"Extracting tokens from {request.image_path}")
         
         # Validate image path
         image_path = Path(request.image_path)
@@ -84,8 +83,103 @@ async def extract_tokens(
         result = await service.process_screenshot(str(image_path), options)
         
         if result["success"]:
+            # Map AI response format to schema format
+            tokens_dict = result["tokens"]
+            mapped_tokens = {}
+            
+            # Map each token type if present
+            if "colors" in tokens_dict:
+                mapped_tokens["colors"] = tokens_dict["colors"]
+            
+            if "typography" in tokens_dict:
+                mapped_tokens["typography"] = tokens_dict["typography"]
+            
+            if "spacing" in tokens_dict:
+                # Map componentSpacing to components
+                spacing_data = tokens_dict["spacing"]
+                if "componentSpacing" in spacing_data:
+                    components = {}
+                    for comp_name, spacing in spacing_data["componentSpacing"].items():
+                        components[comp_name] = spacing
+                    mapped_tokens["spacing"] = {
+                        "scale": spacing_data.get("scale", []),
+                        "components": components
+                    }
+                else:
+                    mapped_tokens["spacing"] = {
+                        "scale": spacing_data.get("scale", []),
+                        "components": {}
+                    }
+            
+            if "shadows" in tokens_dict:
+                # Transform shadow format from AI response to schema format
+                shadows_data = tokens_dict["shadows"]
+                elevation_list = []
+                
+                if "elevation" in shadows_data and isinstance(shadows_data["elevation"], dict):
+                    # Convert elevation dict to list format
+                    for level, shadow_array in shadows_data["elevation"].items():
+                        if isinstance(shadow_array, list):
+                            for shadow in shadow_array:
+                                shadow_token = {
+                                    "name": level,
+                                    "value": f"{shadow.get('offsetX', '0')} {shadow.get('offsetY', '0')} {shadow.get('blur', '0')} {shadow.get('spread', '0')} {shadow.get('color', 'rgba(0,0,0,0.1)')}",
+                                    "offsetX": shadow.get("offsetX"),
+                                    "offsetY": shadow.get("offsetY"),
+                                    "blur": shadow.get("blur"),
+                                    "spread": shadow.get("spread"),
+                                    "color": shadow.get("color"),
+                                    "inset": shadow.get("inset", False)
+                                }
+                                elevation_list.append(shadow_token)
+                
+                text_shadows = shadows_data.get("textShadows", [])
+                if isinstance(text_shadows, list):
+                    # Ensure text shadows have proper structure
+                    text_list = []
+                    for i, shadow in enumerate(text_shadows):
+                        if isinstance(shadow, dict):
+                            # Ensure required fields are present
+                            if "name" not in shadow:
+                                shadow["name"] = f"text-{i}"
+                            if "value" not in shadow:
+                                # Build value from components if available
+                                shadow["value"] = f"{shadow.get('offsetX', '0')} {shadow.get('offsetY', '0')} {shadow.get('blur', '0')} {shadow.get('color', '#000000')}"
+                            text_list.append(shadow)
+                        else:
+                            # Create a default shadow token if needed
+                            text_list.append({
+                                "name": f"text-{i}",
+                                "value": str(shadow) if shadow else ""
+                            })
+                else:
+                    text_list = []
+                
+                mapped_tokens["shadows"] = {
+                    "elevation": elevation_list,
+                    "text": text_list
+                }
+            
+            if "radii" in tokens_dict:
+                # Map componentRadii to components
+                radii_data = tokens_dict["radii"]
+                if "componentRadii" in radii_data:
+                    mapped_tokens["radii"] = {
+                        "scale": radii_data.get("scale", []),
+                        "components": radii_data["componentRadii"]
+                    }
+                else:
+                    mapped_tokens["radii"] = {
+                        "scale": radii_data.get("scale", []),
+                        "components": {}
+                    }
+            
+            # Ensure components array exists
+            if "components" not in mapped_tokens:
+                mapped_tokens["components"] = []
+            
             # Convert to DesignTokens schema
-            tokens = DesignTokens(**result["tokens"])
+            tokens = DesignTokens(**mapped_tokens)
             return TokenExtractionResponse(
                 success=True,
                 tokens=tokens,

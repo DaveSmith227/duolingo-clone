@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.api.deps import get_db
 from app.core.config import get_settings
 from app.schemas.auth import UserRegister, AuthTokenResponse
 from app.services.auth_service import AuthService

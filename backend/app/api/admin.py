@@ -19,8 +19,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.database import get_db
-from app.api.deps import get_current_admin_user
+from app.api.deps import get_db, get_current_admin_user
 from app.models.user import User
 from app.models.auth import SupabaseUser, AuthSession, AuthAuditLog
 from app.models.rbac import Role, UserRoleAssignment

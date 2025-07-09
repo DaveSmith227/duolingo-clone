@@ -7,17 +7,17 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.api.deps import get_db
 from app.core.config import get_settings
-from app.models.user import User, UserProfile
-from app.models.auth import AuthSession, SocialLogin
-from app.schemas.auth import UserLogin, SocialAuthRequest, AuthTokenResponse
+from app.models.user import User
+from app.models.auth import AuthSession
+from app.schemas.auth import LoginRequest, SocialAuthRequest, TokenResponse
 from app.services.rate_limiter import RateLimiter
 from app.services.password_security import PasswordSecurity
 from app.services.session_manager import SessionManager
-from app.services.account_lockout import AccountLockout
+from app.services.account_lockout import AccountLockoutService
 from app.services.audit_logger import AuditLogger
-from app.services.user_sync_service import UserSyncService
+# from app.services.user_sync_service import UserSyncService  # TODO: Implement user sync
 from app.services.cookie_manager import CookieManager
 from app.core.supabase import get_supabase_client
 from app.middleware.validation import validate_request, Validators
@@ -33,12 +33,12 @@ settings = get_settings()
 router = APIRouter()
 
 
-@router.post("/login", response_model=AuthTokenResponse)
+@router.post("/login", response_model=TokenResponse)
 @validate_request(**Validators.login_validator())
 async def login(
     request: Request,
     response: Response,
-    data: UserLogin,
+    data: LoginRequest,
     db: Session = Depends(get_db)
 ):
     """Login user with email and password."""
@@ -239,7 +239,7 @@ async def login(
     }
 
 
-@router.post("/social", response_model=AuthTokenResponse)
+@router.post("/social", response_model=TokenResponse)
 async def social_auth(
     request: Request,
     response: Response,
